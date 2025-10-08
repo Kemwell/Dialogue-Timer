@@ -58,27 +58,48 @@
         /* --- Tooltip/Hint Styles --- */
         /* Styling for the help icon and tooltip */
         .help-icon {
-            position: relative;
+            position: absolute; /* Set absolute to stack it cleanly */
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
             cursor: pointer;
             color: #fcd34d; /* Pale yellow color */
             font-weight: 700; /* Bold */
-            transition: color 0.15s;
-            display: none; /* Hidden by default */
-            line-height: 1; /* Ensure vertical alignment is good */
-            /* Added ml-2 when used inline */
+            transition: opacity 0.3s, transform 0.3s; /* Added transition for smooth vanish */
+            line-height: 1; 
+            display: none; 
+            font-size: 1.25rem; /* text-xl */
         }
         .help-icon:hover {
             color: #fff;
         }
-        .hints-active .help-icon {
-            display: inline-block; /* Show when hints are active on main wrapper */
+
+        /* Container for the icon and tooltip. This is the new hover target. */
+        .help-container {
+            position: relative;
+            display: inline-flex;
+            width: 20px; /* Define width/height for the container */
+            height: 20px;
+            justify-content: center;
+            align-items: center;
         }
+
+        /* NEW RULE: Make icon vanish and scale down on container hover */
+        .help-container:hover .help-icon {
+            opacity: 0;
+            transform: translate(-50%, -50%) scale(0.8);
+        }
+
+        .hints-active .help-icon {
+            display: block; /* Show when hints are active on main wrapper */
+        }
+
         .help-tooltip {
             position: absolute;
-            top: 100%;
+            top: calc(100% + 4px); /* PUSHED DOWN 4px to clear icon */
             left: 50%;
             transform: translateX(-50%);
-            z-index: 50;
+            z-index: 1000; 
             width: 280px;
             padding: 0.75rem;
             background-color: #1f2937; /* Gray-800 */
@@ -87,36 +108,39 @@
             box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.5);
             opacity: 0;
             pointer-events: none;
-            transition: opacity 0.2s, visibility 0.2s;
+            transition: opacity 0.3s, visibility 0.3s;
             visibility: hidden;
             font-size: 0.75rem; /* text-xs */
             line-height: 1.3;
             color: #e5e7eb; /* Gray-200 */
         }
-        .help-icon:hover .help-tooltip {
+        
+        /* NEW RULE: Show the tooltip on container hover */
+        .help-container:hover .help-tooltip {
             opacity: 1;
             visibility: visible;
         }
-        /* Arrow */
+
+        /* Arrow styles remain the same, ensuring they point correctly */
         .help-tooltip::before {
             content: '';
             position: absolute;
-            bottom: 100%;
+            bottom: calc(100% - 4px); 
             left: 50%;
             transform: translateX(-50%);
             border-width: 5px;
             border-style: solid;
-            border-color: transparent transparent #4b5563 transparent; /* Top border matches box border */
+            border-color: transparent transparent #4b5563 transparent; 
         }
         .help-tooltip::after {
             content: '';
             position: absolute;
-            bottom: 100%;
+            bottom: calc(100% - 4px); 
             left: 50%;
             transform: translateX(-50%);
             border-width: 4px;
             border-style: solid;
-            border-color: transparent transparent #1f2937 transparent; /* Top border matches box background */
+            border-color: transparent transparent #1f2937 transparent; 
             margin-bottom: 1px;
         }
     </style>
@@ -127,7 +151,17 @@
         
         <!-- Header with Title and Hints Toggle Button -->
         <div class="flex justify-between items-center mb-4">
-            <h1 class="text-3xl font-extrabold text-white">Dialogue Timer</h1>
+            <h1 class="text-3xl font-extrabold text-white flex items-center">
+                Dialogue Timer
+                <!-- NEW HINT 0: App Title Description - Wrapped in help-container -->
+                <div class="help-container ml-2">
+                    <span class="help-icon text-xl">?</span>
+                    <div class="help-tooltip w-80 translate-x-[-70%] md:translate-x-[-150px]">
+                        This is a tool to help determine if a bit of script is too wordy. By entering the dialogue and selecting a target timeframe, you can see how well the two match. Or don't.
+                    </div>
+                </div>
+            </h1>
+            
             <!-- Hints Toggle Button: Initial styling is gray, changed by JS when active -->
             <button onclick="toggleHints()" id="hintsToggleButton" class="px-3 py-1 text-sm bg-gray-700 text-gray-300 rounded-full hover:bg-gray-600 transition duration-150">
                 Hints
@@ -138,13 +172,13 @@
         <div class="mb-6 p-4 bg-gray-900 rounded-lg border border-gray-700 shadow-inner">
             <label for="targetTimeInput" class="block text-sm font-medium text-gray-300 mb-1 text-center flex justify-center items-center">
                 Adjust the slider to your desired target timeframe
-                <!-- HINT 1: Target Time -->
-                <span class="help-icon text-lg ml-2">
-                    ?
+                <!-- HINT 1: Target Time - Wrapped in help-container -->
+                <div class="help-container ml-2">
+                    <span class="help-icon text-lg">?</span>
                     <div class="help-tooltip w-64 -translate-x-1/2">
                         This slider does not affect play speed in any way. It simply sets a "time budget" that the app can use to evaluate how well the spoken words fit into your desired timeframe.
                     </div>
-                </span>
+                </div>
             </label>
             <p class="text-xs font-medium text-gray-500 mb-3 text-center">
                 or use shortcuts below to snap to predefined lengths.
@@ -152,7 +186,8 @@
             
             <div class="text-center mb-4">
                 <span id="targetTimeDisplay" class="text-blue-400 text-4xl font-mono font-extrabold tracking-tight">7.00</span>
-                <span class="text-gray-400 text-xl font-bold">s</span>
+                <!-- Updated "s" to "seconds" -->
+                <span class="text-gray-400 text-xl font-bold">seconds</span>
             </div>
             <input type="range" id="targetTimeInput" min="1.0" max="60.0" step="0.05" value="7.00"
                    class="w-full"
@@ -210,16 +245,16 @@
                 <!-- Result Message and Pacing Info (main output area) -->
                 <div class="flex-grow relative">
                     <p id="resultMessage" class="text-xl font-bold text-white inline"></p>
-                    <!-- HINT 2: Estimate & Status -->
-                    <span class="help-icon text-lg align-top ml-2">
-                        ?
-                        <div class="help-tooltip w-64">
+                    <!-- HINT 2: Estimate & Status - Wrapped in help-container -->
+                    <div class="help-container align-top ml-2 inline-block">
+                        <span class="help-icon text-lg">?</span>
+                        <div class="help-tooltip w-64 translate-x-[-15%]">
                             <p class="mb-2">This is a <span class="font-bold">rough estimate</span> based on a standard comfortable pacing rate (130 WPM). Actual time may vary.</p>
                             <strong class="text-green-400">Green:</strong> Time met.<br>
                             <strong class="text-yellow-400">Yellow:</strong> Rushed, but acceptable (within a small buffer).<br>
                             <strong class="text-red-400">Red:</strong> Time significantly exceeded. Probable failure.
                         </div>
-                    </span>
+                    </div>
                     <p id="pacingInfo" class="text-sm text-gray-400 mt-1"></p>
                 </div>
             </div>
@@ -276,13 +311,13 @@
                 <div id="dynamicSpeedControl" class="mt-6 pt-4 border-t border-gray-600 hidden">
                     <div class="flex items-center mb-2">
                         <label class="block text-sm font-medium text-gray-300">Adjust Playback Speed (Dynamic)</label>
-                        <!-- HINT 3: Dynamic Speed Control -->
-                        <span class="help-icon text-lg ml-2">
-                            ?
+                        <!-- HINT 3: Dynamic Speed Control - Wrapped in help-container -->
+                        <div class="help-container ml-2">
+                            <span class="help-icon text-lg">?</span>
                             <div class="help-tooltip w-64 -translate-x-1/4">
                                 By adjusting the playback speed, this slider allows you to force the audio to conform to a specific timeframe. Use it to hear how rushed your dialogue may sound when spoken.
                             </div>
-                        </span>
+                        </div>
                     </div>
                     
                     <!-- Rate and Duration Display -->
