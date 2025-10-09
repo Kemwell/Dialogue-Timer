@@ -3,15 +3,23 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Secure AI Text Generator</title>
+    <title>Dialogue Timer</title>
+    <!-- Load Tailwind CSS for styling -->
     <script src="https://cdn.tailwindcss.com"></script>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
     <style>
-        body { font-family: 'Inter', sans-serif; background-color: #f3f4f6; }
-        /* Simple loading spinner */
+        /* Custom styles for Inter font and general body look */
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #0d1117; /* Dark background */
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+        /* Custom styling for the loading spinner */
         .spinner {
-            border: 4px solid rgba(0, 0, 0, 0.1);
-            border-left-color: #4f46e5;
+            border: 4px solid rgba(255, 255, 255, 0.1);
+            border-left-color: #3b82f6;
             border-radius: 50%;
             width: 24px;
             height: 24px;
@@ -21,85 +29,1101 @@
         @keyframes spin {
             to { transform: rotate(360deg); }
         }
+
+        /* Custom styling for the range slider (simulating a sleek control) */
+        input[type=range] {
+            -webkit-appearance: none;
+            width: 100%;
+            height: 8px;
+            background: #4b5563; /* Gray-600 */
+            border-radius: 4px;
+        }
+        /* Thumb styling */
+        input[type=range]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            background: #3b82f6; /* Blue-500 */
+            cursor: pointer;
+            box-shadow: 0 0 5px rgba(0, 0, 0, 0.5);
+            transition: background 0.15s ease-in-out;
+            border: 3px solid #0d1117;
+        }
+        input[type=range]::-webkit-slider-thumb:hover {
+            background: #2563eb; /* Blue-600 */
+        }
+        
+        /* --- Tooltip/Hint Styles --- */
+        /* Styling for the help icon and tooltip */
+        .help-icon {
+            position: absolute; /* Set absolute to stack it cleanly */
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            cursor: pointer;
+            color: #fcd34d; /* Pale yellow color */
+            font-weight: 700; /* Bold */
+            transition: opacity 0.3s, transform 0.3s; /* Added transition for smooth vanish */
+            line-height: 1; 
+            display: none; 
+            font-size: 1.25rem; /* text-xl */
+        }
+        .help-icon:hover {
+            color: #fff;
+        }
+
+        /* Container for the icon and tooltip. This is the new hover target. */
+        .help-container {
+            position: relative;
+            display: inline-flex;
+            width: 20px; /* Define width/height for the container */
+            height: 20px;
+            justify-content: center;
+            align-items: center;
+        }
+
+        /* NEW RULE: Make icon vanish and scale down on container hover */
+        .help-container:hover .help-icon {
+            opacity: 0;
+            transform: translate(-50%, -50%) scale(0.8);
+        }
+
+        .hints-active .help-icon {
+            display: block; /* Show when hints are active on main wrapper */
+        }
+
+        .help-tooltip {
+            position: absolute;
+            top: calc(100% + 4px); /* PUSHED DOWN 4px to clear icon */
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 1000; 
+            width: 280px;
+            padding: 0.75rem;
+            background-color: #1f2937; /* Gray-800 */
+            border: 1px solid #4b5563; /* Gray-600 */
+            border-radius: 0.5rem;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.5);
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.3s, visibility 0.3s;
+            visibility: hidden;
+            font-size: 0.75rem; /* text-xs */
+            line-height: 1.3;
+            color: #e5e7eb; /* Gray-200 */
+        }
+        
+        /* NEW RULE: Show the tooltip on container hover */
+        .help-container:hover .help-tooltip {
+            opacity: 1;
+            visibility: visible;
+        }
+
+        /* Arrow styles remain the same, ensuring they point correctly */
+        .help-tooltip::before {
+            content: '';
+            position: absolute;
+            bottom: calc(100% - 4px); 
+            left: 50%;
+            transform: translateX(-50%);
+            border-width: 5px;
+            border-style: solid;
+            border-color: transparent transparent #4b5563 transparent; 
+        }
+        .help-tooltip::after {
+            content: '';
+            position: absolute;
+            bottom: calc(100% - 4px); 
+            left: 50%;
+            transform: translateX(-50%);
+            border-width: 4px;
+            border-style: solid;
+            border-color: transparent transparent #1f2937 transparent; 
+            margin-bottom: 1px;
+        }
     </style>
 </head>
-<body class="p-4 md:p-8 min-h-screen flex justify-center items-start">
+<body>
+    <!-- Main container where 'hints-active' class is toggled -->
+    <div class="w-full max-w-lg p-6 md:p-10 bg-gray-800 rounded-xl shadow-2xl border border-gray-700">
+        
+        <!-- Header with Title and Hints Toggle Button -->
+        <div class="flex justify-between items-center mb-4">
+            <h1 class="text-3xl font-extrabold text-white flex items-center">
+                Dialogue Timer
+                <!-- NEW HINT 0: App Title Description - Wrapped in help-container -->
+                <div class="help-container ml-2">
+                    <span class="help-icon text-xl">?</span>
+                    <div class="help-tooltip w-80 translate-x-[-70%] md:translate-x-[-150px]">
+                        This is a tool to help determine if a bit of script is too wordy. By entering the dialogue and selecting a target timeframe, you can see how well the two match. Or don't.
+                    </div>
+                </div>
+            </h1>
+            
+            <!-- Hints Toggle Button: Initial styling is gray, changed by JS when active -->
+            <button onclick="toggleHints()" id="hintsToggleButton" class="px-3 py-1 text-sm bg-gray-700 text-gray-300 rounded-full hover:bg-gray-600 transition duration-150">
+                Hints
+            </button>
+        </div>
+        
+        <!-- Target Time Control (Knob/Slider simulation) -->
+        <div class="mb-6 p-4 bg-gray-900 rounded-lg border border-gray-700 shadow-inner">
+            <label for="targetTimeInput" class="block text-sm font-medium text-gray-300 mb-1 text-center flex justify-center items-center">
+                Adjust the slider to your desired target timeframe
+                <!-- HINT 1: Target Time - Wrapped in help-container -->
+                <div class="help-container ml-2">
+                    <span class="help-icon text-lg">?</span>
+                    <div class="help-tooltip w-64 -translate-x-1/2">
+                        This slider does not affect play speed in any way. It simply sets a "time budget" that the app can use to evaluate how well the spoken words fit into your desired timeframe.
+                    </div>
+                </div>
+            </label>
+            <p class="text-xs font-medium text-gray-500 mb-3 text-center">
+                or use shortcuts below to snap to predefined lengths.
+            </p>
+            
+            <div class="text-center mb-4">
+                <span id="targetTimeDisplay" class="text-blue-400 text-4xl font-mono font-extrabold tracking-tight">7.00</span>
+                <!-- Updated "s" to "seconds" -->
+                <span class="text-gray-400 text-xl font-bold">seconds</span>
+            </div>
+            <input type="range" id="targetTimeInput" min="1.0" max="60.0" step="0.05" value="7.00"
+                    class="w-full"
+                    oninput="updateTargetTimeDisplay(this.value)"
+                    onchange="clearResults()">
+            <div class="flex justify-between text-xs text-gray-500 mt-2">
+                <span>1.0s</span>
+                <span>60.0s</span>
+            </div>
+            
+            <!-- Snap Buttons - NOW FIVE BUTTONS using justify-between -->
+            <div class="flex justify-between mt-4 pt-4 border-t border-gray-700">
+                <label class="inline-flex items-center text-gray-300">
+                    <input type="radio" name="snapTime" value="7.00" onchange="snapToTime(this.value)" class="form-radio text-blue-500 h-4 w-4 bg-gray-700 border-gray-600" checked>
+                    <span class="ml-2 text-sm font-medium">7s</span>
+                </label>
+                <!-- NEW 12s SNAP -->
+                <label class="inline-flex items-center text-gray-300">
+                    <input type="radio" name="snapTime" value="12.00" onchange="snapToTime(this.value)" class="form-radio text-blue-500 h-4 w-4 bg-gray-700 border-gray-600">
+                    <span class="ml-2 text-sm font-medium">12s</span>
+                </label>
+                <!-- NEW 15s SNAP -->
+                <label class="inline-flex items-center text-gray-300">
+                    <input type="radio" name="snapTime" value="15.00" onchange="snapToTime(this.value)" class="form-radio text-blue-500 h-4 w-4 bg-gray-700 border-gray-600">
+                    <span class="ml-2 text-sm font-medium">15s</span>
+                </label>
+                <label class="inline-flex items-center text-gray-300">
+                    <input type="radio" name="snapTime" value="30.00" onchange="snapToTime(this.value)" class="form-radio text-blue-500 h-4 w-4 bg-gray-700 border-gray-600">
+                    <span class="ml-2 text-sm font-medium">30s</span>
+                </label>
+                <label class="inline-flex items-center text-gray-300">
+                    <input type="radio" name="snapTime" value="45.00" onchange="snapToTime(this.value)" class="form-radio text-blue-500 h-4 w-4 bg-gray-700 border-gray-600">
+                    <span class="ml-2 text-sm font-medium">45s</span>
+                </label>
+            </div>
+        </div>
+        <!-- /Target Time Control -->
 
-    <div class="w-full max-w-2xl bg-white p-6 md:p-8 rounded-xl shadow-2xl space-y-6">
-        <h1 class="text-3xl font-bold text-gray-800 border-b pb-4">Secure Gemini Proxy</h1>
-        <p class="text-sm text-gray-500">
-            This application uses a Vercel Serverless Function (`/api/generate`) to safely call the Gemini API, protecting your `GEMINI_API_KEY` from public exposure.
-        </p>
 
-        <textarea id="promptInput" rows="4" 
-            class="w-full p-3 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500 transition duration-150"
-            placeholder="Enter your prompt here (e.g., Write a short poem about coding a perfect function)..."></textarea>
+        <!-- Input Area -->
+        <div class="mb-6">
+            <label for="dialogueInput" class="block text-sm font-medium text-gray-300 mb-2">Enter Dialogue Script (1-200 words):</label>
+            <textarea id="dialogueInput" rows="4"
+                      class="w-full p-3 bg-gray-700 text-white border border-gray-600 rounded-lg focus:ring-blue-500 focus:border-blue-500 transition duration-150"
+                      placeholder="Type or paste your dialogue here..."
+                      onkeyup="updateWordCount(this)"
+                      onchange="clearResults()"
+            ></textarea>
+            <p id="wordCount" class="text-xs text-gray-500 mt-1 text-right">0 words</p>
+        </div>
 
-        <button id="generateBtn" 
-            class="w-full flex justify-center items-center px-4 py-3 bg-indigo-600 text-white font-semibold rounded-lg shadow-md hover:bg-indigo-700 transition duration-300 focus:outline-none focus:ring-4 focus:ring-indigo-500 focus:ring-opacity-50">
-            Generate Content
-            <div id="loadingSpinner" class="spinner ml-3"></div>
+        <!-- Submit Button -->
+        <button onclick="calculateTiming()"
+                id="submitButton"
+                class="w-full px-4 py-3 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-4 focus:ring-blue-500 focus:ring-opacity-50 transition duration-150 transform hover:scale-[1.01] shadow-lg disabled:bg-gray-500 disabled:cursor-not-allowed">
+            Calculate Spoken Time
         </button>
 
-        <div id="responseContainer" class="mt-6 p-4 bg-indigo-50 border border-indigo-200 rounded-lg shadow-inner">
-            <h2 class="text-xl font-semibold text-indigo-800 mb-2">AI Response</h2>
-            <p id="responseText" class="whitespace-pre-wrap text-gray-700">The generated text will appear here.</p>
+        <!-- Result Section -->
+        <div id="results" class="mt-8 p-6 bg-gray-700 rounded-xl transition duration-300 hidden">
+            <div class="flex items-start space-x-4">
+                <!-- Status Light -->
+                <div id="statusLight" class="w-6 h-6 rounded-full shadow-lg transition-colors duration-300 mt-1"></div>
+                
+                <!-- Result Message and Pacing Info (main output area) -->
+                <div class="flex-grow relative">
+                    <p id="resultMessage" class="text-xl font-bold text-white inline"></p>
+                    <!-- HINT 2: Estimate & Status - Wrapped in help-container -->
+                    <div class="help-container align-top ml-2 inline-block">
+                        <span class="help-icon text-lg">?</span>
+                        <div class="help-tooltip w-64 translate-x-[-15%]">
+                            <p class="mb-2">This is a <span class="font-bold">rough estimate</span> based on a standard comfortable pacing rate (130 WPM). Actual time may vary.</p>
+                            <strong class="text-green-400">Green:</strong> Time met.<br>
+                            <strong class="text-yellow-400">Yellow:</strong> Rushed, but acceptable (within a small buffer).<br>
+                            <strong class="text-red-400">Red:</strong> Time significantly exceeded. Probable failure.
+                        </div>
+                    </div>
+                    <p id="pacingInfo" class="text-sm text-gray-400 mt-1"></p>
+                </div>
+            </div>
+            
+            <div id="additionalInfo" class="mt-4 pt-4 border-t border-gray-600 text-sm text-gray-300">
+                <p>Word Count: <span id="finalWordCount" class="font-bold"></span></p>
+                <!-- Display for actual measured duration (always based on 1.0x playback rate) -->
+                <p id="actualDurationDisplay" class="mt-2 hidden">Actual 1.0x Duration: <span class="font-bold text-yellow-300"></span></p>
+            </div>
+            
+            <!-- TTS Section -->
+            <div class="mt-4 pt-4 border-t border-gray-600">
+                <label for="voiceSelect" class="block text-sm font-medium text-gray-300 mb-2">Configure and Play (Fixed Rates):</label>
+                <div class="flex flex-col sm:flex-row space-y-3 sm:space-y-0 sm:space-x-3 items-center mb-3">
+                    
+                    <!-- Voice Select - ADDED onchange="clearResults()" -->
+                    <select id="voiceSelect"
+                            onchange="clearResults()"
+                            class="w-full sm:w-1/2 p-2 bg-gray-900 text-white border border-gray-600 rounded-lg focus:ring-green-500 focus:border-green-500">
+                        <!-- Voices updated per user request -->
+                        <option value="Schedar" selected>Male</option>
+                        <option value="Leda">Female</option>
+                    </select>
+
+                    <!-- Prepare Button (Replaced old Listen Now) -->
+                    <button onclick="prepareAudio()"
+                            id="prepareButton"
+                            disabled
+                            class="w-full sm:w-1/2 flex justify-center items-center px-4 py-2 bg-green-600 text-white font-semibold rounded-lg hover:bg-green-700 focus:outline-none focus:ring-4 focus:ring-green-500 focus:ring-opacity-50 transition duration-150 disabled:bg-gray-500 disabled:cursor-not-allowed">
+                        <span id="prepareText">Prepare Audio</span>
+                        <div id="prepareSpinner" class="spinner ml-2"></div>
+                    </button>
+                </div>
+
+                <!-- Play Button Container (Grid layout for two buttons) -->
+                <div id="playButtonContainer" class="mt-3 grid grid-cols-2 gap-3 hidden">
+                    <!-- Normal Playback Button (1.0x) -->
+                    <button onclick="playNormalAudio()"
+                            id="playNormalButton"
+                            disabled
+                            class="px-4 py-3 bg-gray-500 text-white font-semibold rounded-lg hover:bg-gray-600 focus:outline-none focus:ring-4 focus:ring-gray-500 focus:ring-opacity-50 transition duration-150 disabled:opacity-50 disabled:cursor-not-allowed">
+                        <!-- Text set by JavaScript to include timeCP -->
+                    </button>
+                    <!-- Conformed Playback Button (Adjusted Rate) -->
+                    <button onclick="playConformedAudio()"
+                            id="playConformedButton"
+                            disabled
+                            class="px-4 py-3 bg-indigo-600 text-white font-semibold rounded-lg hover:bg-indigo-700 focus:outline-none focus:ring-4 focus:ring-indigo-500 focus:ring-opacity-50 transition duration-150 disabled:opacity-50 disabled:cursor-not-allowed">
+                        <!-- Text set by JavaScript to include currentPlaybackDuration -->
+                    </button>
+                </div>
+
+                <!-- Dynamic Speed Control -->
+                <div id="dynamicSpeedControl" class="mt-6 pt-4 border-t border-gray-600 hidden">
+                    <div class="flex items-center mb-2">
+                        <label class="block text-sm font-medium text-gray-300">Adjust Playback Speed (Dynamic)</label>
+                        <!-- HINT 3: Dynamic Speed Control - Wrapped in help-container -->
+                        <div class="help-container ml-2">
+                            <span class="help-icon text-lg">?</span>
+                            <div class="help-tooltip w-64 -translate-x-1/4">
+                                By adjusting the playback speed, this slider allows you to force the audio to conform to a specific timeframe. Use it to hear how rushed your dialogue may sound when spoken.
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Rate and Duration Display -->
+                    <div class="text-center mb-3 p-3 bg-gray-800 rounded-lg border border-gray-700">
+                        <p class="text-xl font-mono font-bold text-yellow-300">
+                            Rate: <span id="currentDynamicRate">1.00</span>x
+                        </p>
+                        <p class="text-sm text-gray-400">
+                            Duration: <span id="currentDynamicDuration">7.00</span>s
+                        </p>
+                    </div>
+
+                    <!-- Slider -->
+                    <input type="range" id="dynamicRateInput" min="0.5" max="2.0" step="0.01" value="1.00"
+                            class="w-full"
+                            oninput="updateDynamicRateDisplay(this.value)">
+
+                    <div class="flex justify-between text-xs text-gray-500 mt-2 mb-4">
+                        <span>0.5x (Slower)</span>
+                        <span>2.0x (Faster)</span>
+                    </div>
+
+                    <!-- Custom Play Button -->
+                    <button onclick="playCustomRateAudio()"
+                            id="playCustomButton"
+                            disabled
+                            class="w-full px-4 py-3 bg-red-600 text-white font-semibold rounded-lg hover:bg-red-700 focus:outline-none focus:ring-4 focus:ring-red-500 focus:ring-opacity-50 transition duration-150 disabled:opacity-50 disabled:cursor-not-allowed">
+                        Play at Custom Rate
+                    </button>
+                </div>
+                
+                <!-- Custom Time Display (Replaces misleading native player time) -->
+                <div id="customTimerDisplay" class="mt-4 text-center text-4xl font-mono font-extrabold text-blue-400 hidden">
+                    <span id="currentTime">7.00</span>s
+                </div>
+
+                <p id="ttsPacingNote" class="text-xs text-gray-500 mt-3">Pacing: Normal (1.00x)</p>
+                <!-- Audio Player (Controls attribute removed for custom timer) -->
+                <audio id="audioPlayer" class="mt-3 w-full hidden"></audio>
+            </div>
         </div>
+
+        <!-- Modal/Error Box (To replace alert()) -->
+        <div id="modalBox" class="fixed inset-0 bg-gray-900 bg-opacity-75 hidden items-center justify-center p-4 z-50">
+            <div class="bg-red-800 p-6 rounded-lg shadow-xl max-w-sm w-full border border-red-700">
+                <p id="modalText" class="text-white font-semibold"></p>
+                <button onclick="closeModal()" class="mt-4 w-full bg-red-600 hover:bg-red-700 text-white py-2 rounded-lg transition">
+                    OK
+                </button>
+            </div>
+        </div>
+
     </div>
 
     <script>
-        const promptInput = document.getElementById('promptInput');
-        const generateBtn = document.getElementById('generateBtn');
-        const responseText = document.getElementById('responseText');
-        const loadingSpinner = document.getElementById('loadingSpinner');
+        // --- Configuration Constants ---
+        const CP_WPM = 130; 
+        const MAX_WORDS = 200; 
+        const BASE_TARGET = 7.00; // The base time for calculating dynamic scaling thresholds
+        
+        // --- TTS API Configuration ---
+        const API_MODEL = "gemini-2.5-flash-preview-tts";
+        const API_KEY = ""; // Provided by the Canvas environment
+        const API_URL_BASE = "https://generativelanguage.googleapis.com/v1beta/models/";
+        const API_FULL_URL = `${API_URL_BASE}${API_MODEL}:generateContent?key=${API_KEY}`;
+        const MAX_RETRIES = 5;
 
-        generateBtn.addEventListener('click', async () => {
-            const userPrompt = promptInput.value.trim();
-            if (!userPrompt) {
-                responseText.textContent = "Please enter a prompt.";
+        // --- Global State ---
+        let timeCP = 0.0; // Stores Comfortable Pacing duration (1.0x rate duration) - updated after TTS
+        let requiredPlaybackRate = 1.0; 
+        let currentPlaybackDuration = 7.00; // Stores the expected playback duration for the 'Conformed' button
+        let timerInterval = null; // Variable for the custom countdown timer
+        let currentTimerDuration = 7.00; // The duration the current timer is counting down from
+        let currentPlayingMode = null; // Tracks which mode is currently playing: 'normal', 'conformed', or 'custom'
+        
+        // Get DOM elements
+        const mainContainer = document.querySelector('.w-full.max-w-lg'); // Added to toggle 'hints-active'
+        const inputElement = document.getElementById('dialogueInput');
+        const wordCountElement = document.getElementById('wordCount');
+        const resultsBox = document.getElementById('results');
+        const statusLight = document.getElementById('statusLight');
+        const resultMessage = document.getElementById('resultMessage');
+        const pacingInfo = document.getElementById('pacingInfo');
+        const finalWordCount = document.getElementById('finalWordCount');
+        const modalBox = document.getElementById('modalBox');
+        const modalText = document.getElementById('modalText');
+        const voiceSelect = document.getElementById('voiceSelect');
+        const audioPlayer = document.getElementById('audioPlayer');
+        
+        // New/Updated DOM Elements
+        const targetTimeInput = document.getElementById('targetTimeInput');
+        const targetTimeDisplay = document.getElementById('targetTimeDisplay');
+        const prepareButton = document.getElementById('prepareButton');
+        const prepareText = document.getElementById('prepareText');
+        const prepareSpinner = document.getElementById('prepareSpinner');
+        const playButtonContainer = document.getElementById('playButtonContainer');
+        const playNormalButton = document.getElementById('playNormalButton');
+        const playConformedButton = document.getElementById('playConformedButton');
+        const ttsPacingNote = document.getElementById('ttsPacingNote');
+        const actualDurationDisplay = document.getElementById('actualDurationDisplay');
+        const customTimerDisplay = document.getElementById('customTimerDisplay');
+        const currentTimeElement = document.getElementById('currentTime');
+        const hintsToggleButton = document.getElementById('hintsToggleButton'); // New element reference
+        
+        // Dynamic Speed Control Elements (NEW)
+        const dynamicSpeedControl = document.getElementById('dynamicSpeedControl');
+        const dynamicRateInput = document.getElementById('dynamicRateInput');
+        const currentDynamicRate = document.getElementById('currentDynamicRate');
+        const currentDynamicDuration = document.getElementById('currentDynamicDuration');
+        const playCustomButton = document.getElementById('playCustomButton');
+
+
+        // --- Utility Functions (Modal, Word Count, Target Display) ---
+
+        /**
+         * Toggles the 'hints-active' class on the main container to show/hide tooltips,
+         * and updates the button styling.
+         */
+        function toggleHints() {
+            mainContainer.classList.toggle('hints-active');
+            
+            // Check if the container now has the class
+            const isActive = mainContainer.classList.contains('hints-active');
+
+            if (isActive) {
+                // Apply active (yellow, bold) styling
+                hintsToggleButton.classList.remove('bg-gray-700', 'text-gray-300', 'hover:bg-gray-600');
+                hintsToggleButton.classList.add('bg-yellow-500', 'text-gray-900', 'font-bold', 'hover:bg-yellow-400');
+            } else {
+                // Apply inactive (gray) styling
+                hintsToggleButton.classList.remove('bg-yellow-500', 'text-gray-900', 'font-bold', 'hover:bg-yellow-400');
+                hintsToggleButton.classList.add('bg-gray-700', 'text-gray-300', 'hover:bg-gray-600');
+            }
+        }
+
+        function showModal(message) {
+            modalText.textContent = message;
+            modalBox.classList.remove('hidden');
+            modalBox.classList.add('flex');
+        }
+
+        function closeModal() {
+            modalBox.classList.remove('flex');
+            modalBox.classList.add('hidden');
+        }
+
+        function countWords(text) {
+            if (!text) return 0;
+            // Use a regex that correctly handles whitespace and removes empty matches
+            const words = text.trim().split(/\s+/).filter(word => word.length > 0); 
+            return words.length;
+        }
+
+        function updateWordCount(element) {
+            const text = element.value;
+            const count = countWords(text);
+            
+            wordCountElement.textContent = count + ' words';
+            
+            if (count > MAX_WORDS) {
+                wordCountElement.classList.remove('text-gray-500');
+                wordCountElement.classList.add('text-red-500', 'font-bold');
+            } else {
+                wordCountElement.classList.remove('text-red-500', 'font-bold');
+                wordCountElement.classList.add('text-gray-500');
+            }
+            
+            // Re-check submit button and clear results immediately on key up/change
+            clearResults();
+            if (count > 0 && count <= MAX_WORDS) {
+                 document.getElementById('submitButton').disabled = false;
+            } else {
+                 document.getElementById('submitButton').disabled = true;
+            }
+        }
+        
+        function updateTargetTimeDisplay(value) {
+            // Update the prominent display with the slider's current value
+            targetTimeDisplay.textContent = parseFloat(value).toFixed(2);
+        }
+        
+        /**
+         * Clears all results, resets the UI, and updates the Prepare button state
+         * based on the current input text.
+         */
+        function clearResults() {
+             // Stop audio if playing and clear timer
+             audioPlayer.pause();
+             audioPlayer.currentTime = 0;
+             stopCountdown();
+             
+             resultsBox.classList.add('hidden');
+             voiceSelect.disabled = false; // Always enabled on clear
+             playButtonContainer.classList.add('hidden'); 
+             playNormalButton.disabled = true;
+             playConformedButton.disabled = true;
+             audioPlayer.classList.add('hidden');
+             customTimerDisplay.classList.add('hidden'); 
+             dynamicSpeedControl.classList.add('hidden'); // Hide dynamic control on clear
+             playCustomButton.disabled = true;
+             
+             ttsPacingNote.textContent = 'Pacing: Normal (1.00x)';
+             actualDurationDisplay.classList.add('hidden');
+             requiredPlaybackRate = 1.0; 
+             currentPlaybackDuration = parseFloat(targetTimeInput.value); 
+             timeCP = 0.0; // Reset timeCP
+             currentPlayingMode = null; // Reset playing mode
+             updateButtonLabels(null); // Reset button labels
+
+             // Re-enable the Prepare button if the text input is valid
+             const wordCount = countWords(inputElement.value);
+             const submitButton = document.getElementById('submitButton');
+             
+             if (wordCount > 0 && wordCount <= MAX_WORDS) {
+                 prepareButton.disabled = false;
+                 submitButton.disabled = false;
+                 prepareText.textContent = 'Prepare Audio';
+                 prepareSpinner.style.display = 'none';
+             } else {
+                 prepareButton.disabled = true;
+                 submitButton.disabled = true;
+                 prepareText.textContent = 'Prepare Audio';
+                 prepareSpinner.style.display = 'none';
+             }
+        }
+
+        /**
+         * Snaps the time slider to a pre-defined value.
+         * @param {string} seconds - The time value as a string (e.g., "7.00").
+         */
+        function snapToTime(seconds) {
+            const time = parseFloat(seconds);
+            
+            // 1. Update the slider value
+            targetTimeInput.value = time.toFixed(2);
+            
+            // 2. Update the display
+            updateTargetTimeDisplay(time.toFixed(2));
+            
+            // 3. Clear results to force a re-calculation next time
+            clearResults();
+        }
+        
+        // --- Custom Timer Logic ---
+        
+        function stopCountdown() {
+            clearInterval(timerInterval);
+            timerInterval = null;
+        }
+
+        /**
+         * Starts a custom visual countdown timer.
+         * @param {number} duration - The total duration the timer should count down from.
+         * @param {number} [startTime=0] - The time in seconds that has already elapsed (used for resuming).
+         */
+        function startCountdown(duration, startTime = 0) {
+            stopCountdown();
+            currentTimerDuration = duration; 
+            
+            customTimerDisplay.classList.remove('hidden');
+            
+            let remainingTime = currentTimerDuration - startTime; 
+
+            // Set initial display
+            currentTimeElement.textContent = remainingTime.toFixed(2);
+            
+            const realStartTime = performance.now() - (startTime * 1000);
+
+            timerInterval = setInterval(() => {
+                const elapsedTime = (performance.now() - realStartTime) / 1000;
+                remainingTime = currentTimerDuration - elapsedTime; 
+
+                // Use an explicit return to ensure the display is set to 0.00 exactly once
+                if (remainingTime <= 0) {
+                    stopCountdown();
+                    currentTimeElement.textContent = '0.00';
+                    return; 
+                } 
+                currentTimeElement.textContent = remainingTime.toFixed(2);
+            }, 50); 
+        }
+
+        // Add a listener to stop the timer and reset mode when the audio ends naturally
+        audioPlayer.onended = () => {
+            stopCountdown();
+            currentPlayingMode = null;
+            updateButtonLabels(null);
+            audioPlayer.playbackRate = 1.0; // Reset rate after playback
+            ttsPacingNote.textContent = 'Pacing: Normal (1.00x)';
+        };
+
+        // Add a listener to handle play/pause synchronization
+        audioPlayer.onplay = () => {
+             // Stop any previous interval and restart it from the current time
+             startCountdown(currentTimerDuration, audioPlayer.currentTime);
+             
+             if (currentPlayingMode === 'normal') {
+                updateButtonLabels('normal-playing');
+             } else if (currentPlayingMode === 'conformed') {
+                updateButtonLabels('conformed-playing');
+             } else if (currentPlayingMode === 'custom') {
+                updateButtonLabels('custom-playing');
+             }
+        };
+
+        audioPlayer.onpause = () => {
+            stopCountdown();
+            if (currentPlayingMode === 'normal') {
+                updateButtonLabels('normal-paused');
+            } else if (currentPlayingMode === 'conformed') {
+                updateButtonLabels('conformed-paused');
+            } else if (currentPlayingMode === 'custom') {
+                updateButtonLabels('custom-paused');
+            }
+        };
+
+
+        // --- TTS Audio Processing Helpers (Base64 to WAV) ---
+
+        function base64ToArrayBuffer(base64) {
+            const binaryString = atob(base64);
+            const len = binaryString.length;
+            const bytes = new Uint8Array(len);
+            for (let i = 0; i < len; i++) {
+                bytes[i] = binaryString.charCodeAt(i);
+            }
+            return bytes.buffer;
+        }
+
+        function writeString(view, offset, string) {
+            for (let i = 0; i < string.length; i++) {
+                view.setUint8(offset + i, string.charCodeAt(i));
+            }
+        }
+        
+        /**
+         * Converts raw 16-bit PCM audio data into a playable WAV Blob.
+         * This function was incomplete in the original paste.
+         */
+        function pcmToWav(pcm16, sampleRate) {
+            const numChannels = 1;
+            const bytesPerSample = 2; // 16-bit PCM
+            const blockAlign = numChannels * bytesPerSample;
+            const dataLength = pcm16.length * bytesPerSample;
+            const buffer = new ArrayBuffer(44 + dataLength);
+            const view = new DataView(buffer);
+
+            // RIFF chunk descriptor
+            writeString(view, 0, 'RIFF'); // ChunkID
+            view.setUint32(4, 36 + dataLength, true); // ChunkSize
+            writeString(view, 8, 'WAVE'); // Format
+
+            // FMT sub-chunk
+            writeString(view, 12, 'fmt '); // Subchunk1ID
+            view.setUint32(16, 16, true); // Subchunk1Size (16 for PCM)
+            view.setUint16(20, 1, true); // AudioFormat (1 for PCM)
+            view.setUint16(22, numChannels, true); // NumChannels
+            view.setUint32(24, sampleRate, true); // SampleRate
+            view.setUint32(28, sampleRate * blockAlign, true); // ByteRate
+            
+            // Completion of the original snippet:
+            view.setUint16(32, blockAlign, true); // BlockAlign
+            view.setUint16(34, bytesPerSample * 8, true); // BitsPerSample
+
+            // DATA sub-chunk
+            writeString(view, 36, 'data'); // Subchunk2ID
+            view.setUint32(40, dataLength, true); // Subchunk2Size
+
+            // Write the PCM data
+            let offset = 44;
+            for (let i = 0; i < pcm16.length; i++) {
+                // The API returns signed PCM16 data, so use setInt16
+                view.setInt16(offset, pcm16[i], true); 
+                offset += 2;
+            }
+
+            return new Blob([view], { type: 'audio/wav' });
+        }
+
+
+        // --- Core Application Logic ---
+
+        /**
+         * Calculates the estimated spoken time based on CP_WPM (130 WPM) and updates the UI.
+         * This is called by the main submit button.
+         */
+        function calculateTiming() {
+            // Stop current playback/timer if active
+            if (!audioPlayer.paused) {
+                audioPlayer.pause();
+            }
+            stopCountdown();
+
+            const dialogueText = inputElement.value;
+            const wordCount = countWords(dialogueText);
+            const targetTime = parseFloat(targetTimeInput.value);
+
+            if (wordCount === 0 || wordCount > MAX_WORDS) {
+                showModal(`Please enter between 1 and ${MAX_WORDS} words.`);
                 return;
             }
 
-            // UI updates for loading state
-            generateBtn.disabled = true;
-            generateBtn.textContent = 'Generating...';
-            loadingSpinner.style.display = 'block';
-            responseText.textContent = 'Awaiting response from serverless function...';
+            // Estimate time based on Comfortable Pacing (CP_WPM)
+            const estimatedTime = (wordCount / CP_WPM) * 60;
 
-            try {
-                // Post request to the Vercel Serverless Function proxy
-                const response = await fetch('/api/generate', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    // Send the user's prompt as JSON data
-                    body: JSON.stringify({ prompt: userPrompt }),
-                });
+            // Determine required playback rate to fit the target time
+            requiredPlaybackRate = estimatedTime / targetTime;
+            
+            // The time that will be displayed on the conformed button when played
+            currentPlaybackDuration = targetTime; 
 
-                if (!response.ok) {
-                    throw new Error(`Serverless Function Error: ${response.status} ${response.statusText}`);
-                }
+            // --- UI Update and Status Logic ---
+            const rateDifference = requiredPlaybackRate - 1.0;
+            const absRateDifference = Math.abs(rateDifference);
 
-                const data = await response.json();
-                
-                if (data.error) {
-                    responseText.textContent = `API Error: ${data.error}`;
-                } else {
-                    // Display the content received from the proxy
-                    responseText.textContent = data.text || "No text generated.";
-                }
+            let statusColor;
+            let statusMessage;
+            let pacingNote;
 
-            } catch (error) {
-                console.error("Fetch failed:", error);
-                responseText.textContent = `Failed to connect to the generator. Check the console for errors. Details: ${error.message}`;
-            } finally {
-                // UI updates for ending state
-                generateBtn.disabled = false;
-                generateBtn.textContent = 'Generate Content';
-                loadingSpinner.style.display = 'none';
+            // Thresholds for pacing:
+            // 1.0x (Normal) +/- 0.05x (5%) is generally okay.
+            // 1.05x to 1.15x is 'Rushed' (Yellow).
+            // > 1.15x is 'Too Fast' (Red).
+            
+            if (requiredPlaybackRate <= 1.05) { // Time is met or just barely exceeded (<5% fast)
+                statusColor = 'bg-green-500';
+                statusMessage = 'Time Met.';
+                pacingNote = `Pacing is comfortable (${estimatedTime.toFixed(2)}s @ 130 WPM).`;
+            } else if (requiredPlaybackRate <= 1.15) { // Rushed but possibly acceptable (5% to 15% fast)
+                statusColor = 'bg-yellow-500';
+                statusMessage = 'Slightly Rushed.';
+                pacingNote = `Dialogue is slightly too long. You must speak at ${requiredPlaybackRate.toFixed(2)}x rate (or ${Math.round(130 * requiredPlaybackRate)} WPM) to hit ${targetTime.toFixed(2)}s.`;
+            } else { // Significantly too long (>15% fast)
+                statusColor = 'bg-red-500';
+                statusMessage = 'Significantly Exceeded!';
+                pacingNote = `Dialogue is too long. You must speak at a very fast ${requiredPlaybackRate.toFixed(2)}x rate (or ${Math.round(130 * requiredPlaybackRate)} WPM) to hit ${targetTime.toFixed(2)}s.`;
             }
-        });
+
+            // Update result box
+            statusLight.className = `w-6 h-6 rounded-full shadow-lg transition-colors duration-300 mt-1 ${statusColor}`;
+            resultMessage.textContent = statusMessage;
+            pacingInfo.textContent = pacingNote;
+            finalWordCount.textContent = wordCount;
+            actualDurationDisplay.classList.add('hidden'); // Hide the actual duration until we get TTS response
+            
+            // Show the result box
+            resultsBox.classList.remove('hidden');
+
+            // Set dynamic control defaults for the UI (before TTS audio is ready)
+            dynamicRateInput.value = requiredPlaybackRate.toFixed(2);
+            updateDynamicRateDisplay(requiredPlaybackRate);
+
+            // Since a calculation was done, disable all TTS buttons and prompt for preparation
+            prepareButton.disabled = false;
+            prepareText.textContent = 'Prepare Audio';
+            prepareSpinner.style.display = 'none';
+            playButtonContainer.classList.add('hidden');
+            dynamicSpeedControl.classList.add('hidden');
+        }
+
+        /**
+         * Calls the TTS API to generate the audio, handling retries.
+         * The 403 error fix is primarily handled by ensuring this is complete
+         * and the fetch payload/API call structure is correct.
+         */
+        async function prepareAudio() {
+            const dialogueText = inputElement.value;
+            const selectedVoice = voiceSelect.value;
+            
+            prepareButton.disabled = true;
+            voiceSelect.disabled = true;
+            prepareText.textContent = 'Generating...';
+            prepareSpinner.style.display = 'block';
+            
+            // Check if audio already exists and is for the current text/voice
+            if (audioPlayer.src && dialogueText === audioPlayer.dataset.text && selectedVoice === audioPlayer.dataset.voice) {
+                // Audio is already prepared, just enable play buttons and skip API call
+                handleSuccessfulTTS(timeCP);
+                return;
+            }
+
+            const payload = {
+                contents: [{
+                    parts: [{ text: dialogueText }]
+                }],
+                generationConfig: {
+                    responseModalities: ["AUDIO"],
+                    speechConfig: {
+                        voiceConfig: {
+                            prebuiltVoiceConfig: { voiceName: selectedVoice }
+                        }
+                    }
+                },
+                model: API_MODEL
+            };
+
+            let audioData = null;
+            let sampleRate = null;
+            let lastError = null;
+
+            for (let i = 0; i < MAX_RETRIES; i++) {
+                try {
+                    const response = await fetch(API_FULL_URL, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(payload)
+                    });
+
+                    if (!response.ok) {
+                        const errorBody = await response.json().catch(() => ({}));
+                        lastError = `API Error ${response.status}: ${errorBody.error?.message || response.statusText}`;
+                        
+                        // Check for 403 specifically - this is where we need to ensure the user sees the error.
+                        if (response.status === 403) {
+                            throw new Error(`403 Forbidden: Check API permissions or environment configuration. Attempt ${i + 1}/${MAX_RETRIES}`);
+                        }
+
+                        // For other transient errors (5xx, etc.), retry
+                        if (i < MAX_RETRIES - 1) {
+                            const delay = Math.pow(2, i) * 1000;
+                            await new Promise(resolve => setTimeout(resolve, delay));
+                            continue;
+                        } else {
+                            throw new Error(lastError);
+                        }
+                    }
+
+                    const result = await response.json();
+                    const part = result?.candidates?.[0]?.content?.parts?.[0];
+                    audioData = part?.inlineData?.data;
+                    const mimeType = part?.inlineData?.mimeType;
+
+                    if (!audioData || !mimeType || !mimeType.startsWith("audio/L16")) {
+                        throw new Error("Invalid TTS response format or missing audio data.");
+                    }
+
+                    // Extract sample rate from the mimeType (e.g., audio/L16;rate=24000)
+                    const rateMatch = mimeType.match(/rate=(\d+)/);
+                    sampleRate = rateMatch ? parseInt(rateMatch[1], 10) : null;
+                    if (!sampleRate) {
+                        throw new Error("Could not determine audio sample rate from API response.");
+                    }
+
+                    // Success: Exit loop
+                    break;
+
+                } catch (error) {
+                    console.error("TTS Fetch attempt failed:", error.message);
+                    lastError = error.message;
+                    if (error.message.includes("403 Forbidden")) {
+                        // Critical error, do not retry a 403
+                        i = MAX_RETRIES; 
+                        break;
+                    }
+                    if (i === MAX_RETRIES - 1) {
+                        showModal(`Failed to generate audio after ${MAX_RETRIES} attempts. Last error: ${error.message}`);
+                    }
+                }
+            }
+
+            if (!audioData) {
+                // Final cleanup and error display
+                prepareText.textContent = 'Prepare Audio';
+                prepareSpinner.style.display = 'none';
+                prepareButton.disabled = false;
+                voiceSelect.disabled = false;
+                showModal(`Failed to generate audio. The TTS API did not return valid data. Error: ${lastError}`);
+                return;
+            }
+
+            // --- Convert PCM to WAV and update UI ---
+            try {
+                const pcmData = base64ToArrayBuffer(audioData);
+                const pcm16 = new Int16Array(pcmData);
+                const wavBlob = pcmToWav(pcm16, sampleRate);
+                const audioUrl = URL.createObjectURL(wavBlob);
+
+                // Update state and player
+                audioPlayer.src = audioUrl;
+                audioPlayer.load();
+                
+                // Store metadata for re-use check
+                audioPlayer.dataset.text = dialogueText;
+                audioPlayer.dataset.voice = selectedVoice;
+
+                // Set timeCP (actual 1.0x duration) based on player metadata
+                // We use setTimeout to wait for the metadata to load after setting src
+                audioPlayer.onloadedmetadata = () => {
+                    timeCP = audioPlayer.duration;
+                    handleSuccessfulTTS(timeCP);
+                };
+                
+            } catch (e) {
+                console.error("Audio processing failed:", e);
+                prepareText.textContent = 'Prepare Audio';
+                prepareSpinner.style.display = 'none';
+                prepareButton.disabled = false;
+                voiceSelect.disabled = false;
+                showModal('Audio processing failed: Could not convert the raw audio data into a playable format.');
+            }
+        }
+        
+        /**
+         * Handles UI updates after successful TTS generation.
+         * @param {number} actualDuration - The measured duration of the 1.0x audio.
+         */
+        function handleSuccessfulTTS(actualDuration) {
+            prepareText.textContent = 'Audio Ready';
+            prepareSpinner.style.display = 'none';
+            prepareButton.disabled = false;
+            voiceSelect.disabled = true;
+
+            // Show actual duration (timeCP)
+            actualDurationDisplay.querySelector('span').textContent = actualDuration.toFixed(2) + 's';
+            actualDurationDisplay.classList.remove('hidden');
+
+            // Enable play buttons
+            playNormalButton.disabled = false;
+            playConformedButton.disabled = false;
+            audioPlayer.classList.remove('hidden');
+            playButtonContainer.classList.remove('hidden');
+            dynamicSpeedControl.classList.remove('hidden');
+            playCustomButton.disabled = false;
+            
+            // Set dynamic control to current required rate
+            dynamicRateInput.value = requiredPlaybackRate.toFixed(2);
+            updateDynamicRateDisplay(requiredPlaybackRate);
+            
+            // Update button labels with final durations
+            updateButtonLabels(null);
+        }
+
+        /**
+         * Updates the display text for the fixed rate play buttons.
+         * @param {string | null} state - Current playing/paused state or null to reset.
+         */
+        function updateButtonLabels(state) {
+            const normalBaseText = `Play @ 1.0x (${timeCP.toFixed(2)}s)`;
+            const conformedBaseText = `Play @ ${requiredPlaybackRate.toFixed(2)}x (${currentPlaybackDuration.toFixed(2)}s)`;
+            const customBaseText = `Play at Custom Rate`;
+
+            if (state === 'normal-playing') {
+                playNormalButton.textContent = 'Pause ⏸️';
+            } else if (state === 'normal-paused') {
+                 playNormalButton.textContent = 'Resume ▶️';
+            } else {
+                 playNormalButton.textContent = normalBaseText;
+            }
+
+            if (state === 'conformed-playing') {
+                playConformedButton.textContent = 'Pause ⏸️';
+            } else if (state === 'conformed-paused') {
+                 playConformedButton.textContent = 'Resume ▶️';
+            } else {
+                 playConformedButton.textContent = conformedBaseText;
+            }
+
+            // Only update custom button text if it is paused or stopped
+             if (state === 'custom-playing') {
+                playCustomButton.textContent = 'Pause ⏸️';
+            } else if (state === 'custom-paused') {
+                 playCustomButton.textContent = 'Resume ▶️';
+            } else {
+                 playCustomButton.textContent = customBaseText;
+            }
+
+             // Disable the other button if one is playing
+             playNormalButton.disabled = (state !== null && state.startsWith('conformed')) || (state !== null && state.startsWith('custom'));
+             playConformedButton.disabled = (state !== null && state.startsWith('normal')) || (state !== null && state.startsWith('custom'));
+             playCustomButton.disabled = (state !== null && state.startsWith('normal')) || (state !== null && state.startsWith('conformed'));
+
+             // Re-enable if the audio is paused (only the paused button remains active)
+             if (state && state.endsWith('-paused')) {
+                 playNormalButton.disabled = false;
+                 playConformedButton.disabled = false;
+                 playCustomButton.disabled = false;
+             }
+        }
+        
+        /**
+         * Plays audio at the recorded 1.0x rate (timeCP).
+         */
+        function playNormalAudio() {
+            if (currentPlayingMode === 'normal' && !audioPlayer.paused) {
+                audioPlayer.pause();
+                currentPlayingMode = 'normal'; // Remains normal, but paused
+            } else if (currentPlayingMode === 'normal' && audioPlayer.paused) {
+                 audioPlayer.play();
+            } else {
+                // New play mode or switching mode
+                audioPlayer.pause();
+                stopCountdown();
+                
+                audioPlayer.playbackRate = 1.0;
+                audioPlayer.currentTime = 0;
+                currentTimerDuration = timeCP; // Set timer to actual duration
+                currentPlayingMode = 'normal';
+                
+                ttsPacingNote.textContent = 'Pacing: Normal (1.00x)';
+                audioPlayer.play();
+            }
+        }
+
+        /**
+         * Plays audio at the calculated requiredPlaybackRate to hit the target time.
+         */
+        function playConformedAudio() {
+             if (currentPlayingMode === 'conformed' && !audioPlayer.paused) {
+                audioPlayer.pause();
+                currentPlayingMode = 'conformed'; // Remains conformed, but paused
+            } else if (currentPlayingMode === 'conformed' && audioPlayer.paused) {
+                 audioPlayer.play();
+            } else {
+                // New play mode or switching mode
+                audioPlayer.pause();
+                stopCountdown();
+
+                audioPlayer.playbackRate = requiredPlaybackRate;
+                audioPlayer.currentTime = 0;
+                currentTimerDuration = parseFloat(targetTimeInput.value); // Set timer to target time
+                currentPlayingMode = 'conformed';
+
+                ttsPacingNote.textContent = `Pacing: Conformed (${requiredPlaybackRate.toFixed(2)}x)`;
+                audioPlayer.play();
+            }
+        }
+        
+        /**
+         * Updates the dynamic rate display and recalculated duration based on the slider input.
+         * @param {number} rate - The new playback rate from the slider.
+         */
+        function updateDynamicRateDisplay(rate) {
+            const floatRate = parseFloat(rate);
+            const calculatedDuration = timeCP / floatRate;
+            
+            // Store the dynamic timer duration separately
+            currentDynamicDuration.dataset.duration = calculatedDuration.toFixed(2); 
+
+            // Update UI elements
+            currentDynamicRate.textContent = floatRate.toFixed(2);
+            currentDynamicDuration.textContent = calculatedDuration.toFixed(2);
+            
+            // If the audio is currently playing in custom mode, update rate and timer immediately
+            if (currentPlayingMode === 'custom' && !audioPlayer.paused) {
+                audioPlayer.playbackRate = floatRate;
+                // Restart timer with new duration and current elapsed time factored by new rate
+                const newElapsedTime = audioPlayer.currentTime * (floatRate / audioPlayer.playbackRate);
+                audioPlayer.currentTime = newElapsedTime; // Adjust player time based on the new rate
+                currentTimerDuration = calculatedDuration; 
+                startCountdown(calculatedDuration, audioPlayer.currentTime / floatRate);
+                ttsPacingNote.textContent = `Pacing: Custom (${floatRate.toFixed(2)}x)`;
+            }
+        }
+
+        /**
+         * Plays audio at the dynamically set rate from the slider.
+         */
+        function playCustomRateAudio() {
+            const customRate = parseFloat(dynamicRateInput.value);
+            const customDuration = parseFloat(currentDynamicDuration.dataset.duration);
+            
+            if (currentPlayingMode === 'custom' && !audioPlayer.paused) {
+                audioPlayer.pause();
+                currentPlayingMode = 'custom'; // Remains custom, but paused
+            } else if (currentPlayingMode === 'custom' && audioPlayer.paused) {
+                 audioPlayer.play();
+            } else {
+                // New play mode or switching mode
+                audioPlayer.pause();
+                stopCountdown();
+
+                audioPlayer.playbackRate = customRate;
+                audioPlayer.currentTime = 0;
+                currentTimerDuration = customDuration; // Set timer to custom duration
+                currentPlayingMode = 'custom';
+
+                ttsPacingNote.textContent = `Pacing: Custom (${customRate.toFixed(2)}x)`;
+                audioPlayer.play();
+            }
+        }
+
+
+        // --- Initialization ---
+
+        window.onload = () => {
+            // Set initial dynamic rate display
+            updateDynamicRateDisplay(dynamicRateInput.value);
+            // Run initial word count check to set button state
+            updateWordCount(inputElement);
+            // Ensure the initial snap radio button is selected and calls snapToTime
+            const initialSnap = document.querySelector('input[name="snapTime"]:checked');
+            if (initialSnap) {
+                 snapToTime(initialSnap.value);
+            }
+        };
+
     </script>
 </body>
 </html>
