@@ -153,7 +153,7 @@
         <div class="flex justify-between items-center mb-4">
             <h1 class="text-3xl font-extrabold text-white flex items-center">
                 Dialogue Timer
-                <!-- NEW HINT 0: App Title Description - Wrapped in help-container -->
+                <!-- HINT 0: App Title Description - Wrapped in help-container -->
                 <div class="help-container ml-2">
                     <span class="help-icon text-xl">?</span>
                     <div class="help-tooltip w-80 translate-x-[-70%] md:translate-x-[-150px]">
@@ -186,7 +186,6 @@
             
             <div class="text-center mb-4">
                 <span id="targetTimeDisplay" class="text-blue-400 text-4xl font-mono font-extrabold tracking-tight">7.00</span>
-                <!-- Updated "s" to "seconds" -->
                 <span class="text-gray-400 text-xl font-bold">seconds</span>
             </div>
             <input type="range" id="targetTimeInput" min="1.0" max="60.0" step="0.05" value="7.00"
@@ -231,10 +230,10 @@
         <div class="mb-6">
             <label for="dialogueInput" class="block text-sm font-medium text-gray-300 mb-2">Enter Dialogue Script (1-200 words):</label>
             <textarea id="dialogueInput" rows="4"
-                      class="w-full p-3 bg-gray-700 text-white border border-gray-600 rounded-lg focus:ring-blue-500 focus:border-blue-500 transition duration-150"
-                      placeholder="Type or paste your dialogue here..."
-                      onkeyup="updateWordCount(this)"
-                      onchange="clearResults()"
+                    class="w-full p-3 bg-gray-700 text-white border border-gray-600 rounded-lg focus:ring-blue-500 focus:border-blue-500 transition duration-150"
+                    placeholder="Type or paste your dialogue here..."
+                    onkeyup="updateWordCount(this)"
+                    onchange="clearResults()"
             ></textarea>
             <p id="wordCount" class="text-xs text-gray-500 mt-1 text-right">0 words</p>
         </div>
@@ -242,7 +241,8 @@
         <!-- Submit Button -->
         <button onclick="calculateTiming()"
                 id="submitButton"
-                class="w-full px-4 py-3 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-4 focus:ring-blue-500 focus:ring-opacity-50 transition duration-150 transform hover:scale-[1.01] shadow-lg disabled:bg-gray-500 disabled:cursor-not-allowed">
+                class="w-full px-4 py-3 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-4 focus:ring-blue-500 focus:ring-opacity-50 transition duration-150 transform hover:scale-[1.01] shadow-lg disabled:bg-gray-500 disabled:cursor-not-allowed"
+                disabled>
             Calculate Spoken Time
         </button>
 
@@ -285,8 +285,10 @@
                             onchange="clearResults()"
                             class="w-full sm:w-1/2 p-2 bg-gray-900 text-white border border-gray-600 rounded-lg focus:ring-green-500 focus:border-green-500">
                         <!-- Voices updated per user request -->
-                        <option value="Schedar" selected>Male</option>
-                        <option value="Leda">Female</option>
+                        <option value="Schedar" selected>Male (Even)</option>
+                        <option value="Leda">Female (Youthful)</option>
+                        <option value="Kore">Male (Firm)</option>
+                        <option value="Puck">Female (Upbeat)</option>
                     </select>
 
                     <!-- Prepare Button (Replaced old Listen Now) -->
@@ -384,9 +386,9 @@
 
     <script>
         // --- Configuration Constants ---
-        const CP_WPM = 130; 
+        const CP_WPM = 130; // Comfortable Pacing Words Per Minute (standard reading/speaking rate)
         const MAX_WORDS = 200; 
-        const BASE_TARGET = 7.00; // The base time for calculating dynamic scaling thresholds
+        const ACCEPTABLE_VARIANCE = 0.2; // 20% margin for Yellow status
         
         // --- TTS API Configuration ---
         const API_MODEL = "gemini-2.5-flash-preview-tts";
@@ -396,17 +398,18 @@
         const MAX_RETRIES = 5;
 
         // --- Global State ---
-        let timeCP = 0.0; // Stores Comfortable Pacing duration (1.0x rate duration) - updated after TTS
+        let timeCP = 0.0; // Stores Comfortable Pacing duration (Actual 1.0x rate duration) - updated after audio loads
         let requiredPlaybackRate = 1.0; 
-        let currentPlaybackDuration = 7.00; // Stores the expected playback duration for the 'Conformed' button
+        let targetTime = 7.00; // The target time from the slider
         let timerInterval = null; // Variable for the custom countdown timer
         let currentTimerDuration = 7.00; // The duration the current timer is counting down from
         let currentPlayingMode = null; // Tracks which mode is currently playing: 'normal', 'conformed', or 'custom'
         
         // Get DOM elements
-        const mainContainer = document.querySelector('.w-full.max-w-lg'); // Added to toggle 'hints-active'
+        const mainContainer = document.querySelector('.w-full.max-w-lg');
         const inputElement = document.getElementById('dialogueInput');
         const wordCountElement = document.getElementById('wordCount');
+        const submitButton = document.getElementById('submitButton');
         const resultsBox = document.getElementById('results');
         const statusLight = document.getElementById('statusLight');
         const resultMessage = document.getElementById('resultMessage');
@@ -428,11 +431,12 @@
         const playConformedButton = document.getElementById('playConformedButton');
         const ttsPacingNote = document.getElementById('ttsPacingNote');
         const actualDurationDisplay = document.getElementById('actualDurationDisplay');
+        const actualDurationSpan = actualDurationDisplay.querySelector('span');
         const customTimerDisplay = document.getElementById('customTimerDisplay');
         const currentTimeElement = document.getElementById('currentTime');
-        const hintsToggleButton = document.getElementById('hintsToggleButton'); // New element reference
+        const hintsToggleButton = document.getElementById('hintsToggleButton');
         
-        // Dynamic Speed Control Elements (NEW)
+        // Dynamic Speed Control Elements
         const dynamicSpeedControl = document.getElementById('dynamicSpeedControl');
         const dynamicRateInput = document.getElementById('dynamicRateInput');
         const currentDynamicRate = document.getElementById('currentDynamicRate');
@@ -449,7 +453,6 @@
         function toggleHints() {
             mainContainer.classList.toggle('hints-active');
             
-            // Check if the container now has the class
             const isActive = mainContainer.classList.contains('hints-active');
 
             if (isActive) {
@@ -476,7 +479,6 @@
 
         function countWords(text) {
             if (!text) return 0;
-            // Use a regex that correctly handles whitespace and removes empty matches
             const words = text.trim().split(/\s+/).filter(word => word.length > 0); 
             return words.length;
         }
@@ -498,20 +500,23 @@
             // Re-check submit button and clear results immediately on key up/change
             clearResults();
             if (count > 0 && count <= MAX_WORDS) {
-                 document.getElementById('submitButton').disabled = false;
+                submitButton.disabled = false;
+                prepareButton.disabled = false;
             } else {
-                 document.getElementById('submitButton').disabled = true;
+                submitButton.disabled = true;
+                prepareButton.disabled = true;
             }
         }
         
         function updateTargetTimeDisplay(value) {
             // Update the prominent display with the slider's current value
-            targetTimeDisplay.textContent = parseFloat(value).toFixed(2);
+            targetTime = parseFloat(value);
+            targetTimeDisplay.textContent = targetTime.toFixed(2);
+            clearResults();
         }
         
         /**
-         * Clears all results, resets the UI, and updates the Prepare button state
-         * based on the current input text.
+         * Clears all results, resets the UI.
          */
         function clearResults() {
              // Stop audio if playing and clear timer
@@ -519,39 +524,39 @@
              audioPlayer.currentTime = 0;
              stopCountdown();
              
+             // Reset UI states
              resultsBox.classList.add('hidden');
-             voiceSelect.disabled = false; // Always enabled on clear
+             voiceSelect.disabled = false;
              playButtonContainer.classList.add('hidden'); 
              playNormalButton.disabled = true;
              playConformedButton.disabled = true;
              audioPlayer.classList.add('hidden');
              customTimerDisplay.classList.add('hidden'); 
-             dynamicSpeedControl.classList.add('hidden'); // Hide dynamic control on clear
+             dynamicSpeedControl.classList.add('hidden');
              playCustomButton.disabled = true;
              
              ttsPacingNote.textContent = 'Pacing: Normal (1.00x)';
              actualDurationDisplay.classList.add('hidden');
-             requiredPlaybackRate = 1.0; 
-             currentPlaybackDuration = parseFloat(targetTimeInput.value); 
-             timeCP = 0.0; // Reset timeCP
-             currentPlayingMode = null; // Reset playing mode
-             updateButtonLabels(null); // Reset button labels
-
-             // Re-enable the Prepare button if the text input is valid
-             const wordCount = countWords(inputElement.value);
-             const submitButton = document.getElementById('submitButton');
              
+             // Reset global state
+             requiredPlaybackRate = 1.0; 
+             timeCP = 0.0;
+             currentPlayingMode = null;
+             
+             // Re-enable/reset submit and prepare buttons based on current input validity
+             const wordCount = countWords(inputElement.value);
              if (wordCount > 0 && wordCount <= MAX_WORDS) {
-                 prepareButton.disabled = false;
                  submitButton.disabled = false;
+                 prepareButton.disabled = false;
                  prepareText.textContent = 'Prepare Audio';
                  prepareSpinner.style.display = 'none';
              } else {
-                 prepareButton.disabled = true;
                  submitButton.disabled = true;
+                 prepareButton.disabled = true;
                  prepareText.textContent = 'Prepare Audio';
                  prepareSpinner.style.display = 'none';
              }
+             updateButtonLabels(null);
         }
 
         /**
@@ -560,14 +565,8 @@
          */
         function snapToTime(seconds) {
             const time = parseFloat(seconds);
-            
-            // 1. Update the slider value
             targetTimeInput.value = time.toFixed(2);
-            
-            // 2. Update the display
             updateTargetTimeDisplay(time.toFixed(2));
-            
-            // 3. Clear results to force a re-calculation next time
             clearResults();
         }
         
@@ -600,7 +599,6 @@
                 const elapsedTime = (performance.now() - realStartTime) / 1000;
                 remainingTime = currentTimerDuration - elapsedTime; 
 
-                // Use an explicit return to ensure the display is set to 0.00 exactly once
                 if (remainingTime <= 0) {
                     stopCountdown();
                     currentTimeElement.textContent = '0.00';
@@ -617,19 +615,22 @@
             updateButtonLabels(null);
             audioPlayer.playbackRate = 1.0; // Reset rate after playback
             ttsPacingNote.textContent = 'Pacing: Normal (1.00x)';
+            // Hide the custom timer once playback is complete
+            customTimerDisplay.classList.add('hidden');
         };
 
         // Add a listener to handle play/pause synchronization
         audioPlayer.onplay = () => {
              // Stop any previous interval and restart it from the current time
-             startCountdown(currentTimerDuration, audioPlayer.currentTime);
+             const actualDuration = audioPlayer.duration / audioPlayer.playbackRate;
+             startCountdown(actualDuration, audioPlayer.currentTime / audioPlayer.playbackRate);
              
              if (currentPlayingMode === 'normal') {
-                updateButtonLabels('normal-playing');
+                 updateButtonLabels('normal-playing');
              } else if (currentPlayingMode === 'conformed') {
-                updateButtonLabels('conformed-playing');
+                 updateButtonLabels('conformed-playing');
              } else if (currentPlayingMode === 'custom') {
-                updateButtonLabels('custom-playing');
+                 updateButtonLabels('custom-playing');
              }
         };
 
@@ -643,10 +644,163 @@
                 updateButtonLabels('custom-paused');
             }
         };
+        
+        /**
+         * Updates the text and state of the play buttons based on the current playback status.
+         * @param {string|null} mode - Current state: 'normal', 'conformed', 'custom', 'normal-playing', etc., or null to reset.
+         */
+        function updateButtonLabels(mode) {
+            const formatTime = (time) => (time !== null && time !== undefined ? time.toFixed(2) + 's' : '---');
+
+            const normalDuration = timeCP;
+            const conformedDuration = targetTime;
+            const customRate = parseFloat(dynamicRateInput.value);
+            const customDuration = timeCP / customRate;
+            
+            // 1. Reset all buttons to default appearance/text
+            playNormalButton.textContent = `Play Normal (${formatTime(normalDuration)})`;
+            playConformedButton.textContent = `Play Conformed (${formatTime(conformedDuration)})`;
+            playCustomButton.textContent = `Play at Custom Rate`;
+
+            // 2. Handle active/paused/playing states
+            if (mode === 'normal-playing') {
+                playNormalButton.textContent = 'PAUSE (Normal)';
+                playNormalButton.classList.remove('bg-gray-500', 'hover:bg-gray-600');
+                playNormalButton.classList.add('bg-orange-500', 'hover:bg-orange-600');
+            } else if (mode === 'normal-paused') {
+                playNormalButton.textContent = 'RESUME (Normal)';
+                playNormalButton.classList.remove('bg-gray-500', 'hover:bg-gray-600');
+                playNormalButton.classList.add('bg-orange-500', 'hover:bg-orange-600');
+            } else {
+                playNormalButton.classList.remove('bg-orange-500', 'hover:bg-orange-600');
+                playNormalButton.classList.add('bg-gray-500', 'hover:bg-gray-600');
+            }
+
+            if (mode === 'conformed-playing') {
+                playConformedButton.textContent = 'PAUSE (Conformed)';
+                playConformedButton.classList.remove('bg-indigo-600', 'hover:bg-indigo-700');
+                playConformedButton.classList.add('bg-orange-500', 'hover:bg-orange-600');
+            } else if (mode === 'conformed-paused') {
+                playConformedButton.textContent = 'RESUME (Conformed)';
+                playConformedButton.classList.remove('bg-indigo-600', 'hover:bg-indigo-700');
+                playConformedButton.classList.add('bg-orange-500', 'hover:bg-orange-600');
+            } else {
+                playConformedButton.classList.remove('bg-orange-500', 'hover:bg-orange-600');
+                playConformedButton.classList.add('bg-indigo-600', 'hover:bg-indigo-700');
+            }
+
+            if (mode === 'custom-playing') {
+                playCustomButton.textContent = `PAUSE (${formatTime(customDuration)})`;
+                playCustomButton.classList.remove('bg-red-600', 'hover:bg-red-700');
+                playCustomButton.classList.add('bg-orange-500', 'hover:bg-orange-600');
+            } else if (mode === 'custom-paused') {
+                playCustomButton.textContent = `RESUME (${formatTime(customDuration)})`;
+                playCustomButton.classList.remove('bg-red-600', 'hover:bg-red-700');
+                playCustomButton.classList.add('bg-orange-500', 'hover:bg-orange-600');
+            } else {
+                playCustomButton.classList.remove('bg-orange-500', 'hover:bg-orange-600');
+                playCustomButton.classList.add('bg-red-600', 'hover:bg-red-700');
+            }
+
+            // Ensure only the currently playing/paused mode is active/resumable
+            const playButtons = [playNormalButton, playConformedButton, playCustomButton];
+            
+            playButtons.forEach(btn => {
+                if (mode && !mode.includes('playing') && !mode.includes('paused')) {
+                     // If we are playing, disable others, otherwise enable all if audio is ready
+                } else if (mode && mode.includes('playing')) {
+                    if (btn !== document.getElementById(`play${mode.split('-')[0].charAt(0).toUpperCase() + mode.split('-')[0].slice(1)}Button`)) {
+                        btn.disabled = true;
+                    }
+                } else if (mode && mode.includes('paused')) {
+                    if (btn !== document.getElementById(`play${mode.split('-')[0].charAt(0).toUpperCase() + mode.split('-')[0].slice(1)}Button`)) {
+                        btn.disabled = true;
+                    } else {
+                        btn.disabled = false;
+                    }
+                } else if (timeCP > 0) {
+                    btn.disabled = false; // Enable all if audio is loaded
+                } else {
+                    btn.disabled = true; // Disable all if audio is not loaded
+                }
+            });
+
+            // Ensure custom button is only enabled if the dynamic control is visible
+            if (dynamicSpeedControl.classList.contains('hidden')) {
+                playCustomButton.disabled = true;
+            }
+        }
 
 
-        // --- TTS Audio Processing Helpers (Base64 to WAV) ---
+        // --- Core Logic: Calculation & TTS ---
 
+        /**
+         * Calculates the estimated spoken time (timeCP) and displays the results.
+         */
+        function calculateTiming() {
+            // 1. Validate Input
+            const dialogue = inputElement.value;
+            const wordCount = countWords(dialogue);
+            
+            if (wordCount === 0 || wordCount > MAX_WORDS) {
+                showModal('Please enter a dialogue between 1 and 200 words.');
+                return;
+            }
+            
+            // 2. Calculate Comfortable Pacing Time (Estimation)
+            // Time (seconds) = (Word Count / WPM) * 60 seconds
+            const spokenDurationEstimate = (wordCount / CP_WPM) * 60;
+            const targetDuration = parseFloat(targetTimeInput.value);
+            
+            // Update global state and UI
+            targetTime = targetDuration; // Update global target
+            
+            // 3. Determine required rate (This is purely informative before TTS loads)
+            requiredPlaybackRate = spokenDurationEstimate / targetDuration;
+            
+            // 4. Display Results (Status Light)
+            const diff = spokenDurationEstimate - targetDuration;
+            const absDiff = Math.abs(diff);
+            
+            let statusClass;
+            let message;
+            
+            if (spokenDurationEstimate <= targetDuration) {
+                // Spoken time is less than or equal to target (Green status)
+                statusClass = 'bg-green-500';
+                message = `Pacing is comfortable. Estimated time: ${spokenDurationEstimate.toFixed(2)}s`;
+            } else if (absDiff / targetDuration <= ACCEPTABLE_VARIANCE) {
+                // Spoken time is up to 20% over target (Yellow status)
+                statusClass = 'bg-yellow-500';
+                message = `Pacing may be slightly rushed. Estimated time: ${spokenDurationEstimate.toFixed(2)}s`;
+            } else {
+                // Spoken time is significantly over target (Red status)
+                statusClass = 'bg-red-500';
+                message = `Pacing is too fast! Estimated time: ${spokenDurationEstimate.toFixed(2)}s`;
+            }
+            
+            // Update UI elements
+            statusLight.className = `w-6 h-6 rounded-full shadow-lg transition-colors duration-300 mt-1 ${statusClass}`;
+            resultMessage.textContent = message;
+            finalWordCount.textContent = wordCount;
+            pacingInfo.textContent = `To meet the ${targetDuration.toFixed(2)}s target, the dialogue must be spoken at ${(requiredPlaybackRate * 100).toFixed(0)}% speed.`;
+            
+            // Show result section
+            resultsBox.classList.remove('hidden');
+
+            // Set dynamic control initial value to the required rate
+            dynamicRateInput.value = requiredPlaybackRate.toFixed(2);
+            updateDynamicRateDisplay(requiredPlaybackRate.toFixed(2));
+            
+            // Enable preparation controls
+            prepareButton.disabled = false;
+        }
+
+        /**
+         * Converts a Base64 string to an ArrayBuffer.
+         * @param {string} base64 - Base64 data string.
+         * @returns {ArrayBuffer}
+         */
         function base64ToArrayBuffer(base64) {
             const binaryString = atob(base64);
             const len = binaryString.length;
@@ -657,470 +811,327 @@
             return bytes.buffer;
         }
 
+        /**
+         * Writes a string to a DataView at a specified offset.
+         * @param {DataView} view
+         * @param {number} offset
+         * @param {string} string
+         */
         function writeString(view, offset, string) {
             for (let i = 0; i < string.length; i++) {
                 view.setUint8(offset + i, string.charCodeAt(i));
             }
         }
-        
+
         /**
-         * Converts raw 16-bit PCM audio data into a playable WAV Blob.
-         * This function was incomplete in the original paste.
+         * Converts signed 16-bit PCM audio data to a WAV format Blob.
+         * @param {Int16Array} pcm16 - Raw PCM data.
+         * @param {number} sampleRate - Sample rate (e.g., 24000).
+         * @returns {Blob} The WAV audio blob.
          */
         function pcmToWav(pcm16, sampleRate) {
             const numChannels = 1;
             const bytesPerSample = 2; // 16-bit PCM
             const blockAlign = numChannels * bytesPerSample;
-            const dataLength = pcm16.length * bytesPerSample;
-            const buffer = new ArrayBuffer(44 + dataLength);
+            const byteRate = sampleRate * blockAlign;
+            const dataLength = pcm16.byteLength;
+            const totalLength = 44 + dataLength; // 44 bytes for the WAV header
+
+            const buffer = new ArrayBuffer(totalLength);
             const view = new DataView(buffer);
 
-            // RIFF chunk descriptor
-            writeString(view, 0, 'RIFF'); // ChunkID
-            view.setUint32(4, 36 + dataLength, true); // ChunkSize
-            writeString(view, 8, 'WAVE'); // Format
+            let offset = 0;
 
-            // FMT sub-chunk
-            writeString(view, 12, 'fmt '); // Subchunk1ID
-            view.setUint32(16, 16, true); // Subchunk1Size (16 for PCM)
-            view.setUint16(20, 1, true); // AudioFormat (1 for PCM)
-            view.setUint16(22, numChannels, true); // NumChannels
-            view.setUint32(24, sampleRate, true); // SampleRate
-            view.setUint32(28, sampleRate * blockAlign, true); // ByteRate
-            
-            // Completion of the original snippet:
-            view.setUint16(32, blockAlign, true); // BlockAlign
-            view.setUint16(34, bytesPerSample * 8, true); // BitsPerSample
+            // 1. RIFF chunk
+            writeString(view, offset, 'RIFF'); offset += 4;
+            view.setUint32(offset, totalLength - 8, true); offset += 4; // ChunkSize
+            writeString(view, offset, 'WAVE'); offset += 4;
 
-            // DATA sub-chunk
-            writeString(view, 36, 'data'); // Subchunk2ID
-            view.setUint32(40, dataLength, true); // Subchunk2Size
+            // 2. FMT chunk
+            writeString(view, offset, 'fmt '); offset += 4;
+            view.setUint32(offset, 16, true); offset += 4; // Subchunk1Size (16 for PCM)
+            view.setUint16(offset, 1, true); offset += 2; // AudioFormat (1 for PCM)
+            view.setUint16(offset, numChannels, true); offset += 2; // NumChannels
+            view.setUint32(offset, sampleRate, true); offset += 4; // SampleRate
+            view.setUint32(offset, byteRate, true); offset += 4; // ByteRate
+            view.setUint16(offset, blockAlign, true); offset += 2; // BlockAlign
+            view.setUint16(offset, bytesPerSample * 8, true); offset += 2; // BitsPerSample
+
+            // 3. DATA chunk
+            writeString(view, offset, 'data'); offset += 4;
+            view.setUint32(offset, dataLength, true); offset += 4; // Subchunk2Size
 
             // Write the PCM data
-            let offset = 44;
-            for (let i = 0; i < pcm16.length; i++) {
-                // The API returns signed PCM16 data, so use setInt16
-                view.setInt16(offset, pcm16[i], true); 
-                offset += 2;
+            const pcmBytes = new Uint8Array(pcm16.buffer);
+            for (let i = 0; i < dataLength; i++) {
+                view.setUint8(offset + i, pcmBytes[i]);
             }
 
             return new Blob([view], { type: 'audio/wav' });
         }
 
 
-        // --- Core Application Logic ---
-
         /**
-         * Calculates the estimated spoken time based on CP_WPM (130 WPM) and updates the UI.
-         * This is called by the main submit button.
+         * Makes the TTS API call with exponential backoff for retries.
+         * @param {string} text - The dialogue text.
+         * @param {string} voice - The selected voice name.
+         * @param {number} retryCount - Current retry attempt.
+         * @returns {Promise<object>} The JSON response from the API.
          */
-        function calculateTiming() {
-            // Stop current playback/timer if active
-            if (!audioPlayer.paused) {
-                audioPlayer.pause();
-            }
-            stopCountdown();
-
-            const dialogueText = inputElement.value;
-            const wordCount = countWords(dialogueText);
-            const targetTime = parseFloat(targetTimeInput.value);
-
-            if (wordCount === 0 || wordCount > MAX_WORDS) {
-                showModal(`Please enter between 1 and ${MAX_WORDS} words.`);
-                return;
-            }
-
-            // Estimate time based on Comfortable Pacing (CP_WPM)
-            const estimatedTime = (wordCount / CP_WPM) * 60;
-
-            // Determine required playback rate to fit the target time
-            requiredPlaybackRate = estimatedTime / targetTime;
-            
-            // The time that will be displayed on the conformed button when played
-            currentPlaybackDuration = targetTime; 
-
-            // --- UI Update and Status Logic ---
-            const rateDifference = requiredPlaybackRate - 1.0;
-            const absRateDifference = Math.abs(rateDifference);
-
-            let statusColor;
-            let statusMessage;
-            let pacingNote;
-
-            // Thresholds for pacing:
-            // 1.0x (Normal) +/- 0.05x (5%) is generally okay.
-            // 1.05x to 1.15x is 'Rushed' (Yellow).
-            // > 1.15x is 'Too Fast' (Red).
-            
-            if (requiredPlaybackRate <= 1.05) { // Time is met or just barely exceeded (<5% fast)
-                statusColor = 'bg-green-500';
-                statusMessage = 'Time Met.';
-                pacingNote = `Pacing is comfortable (${estimatedTime.toFixed(2)}s @ 130 WPM).`;
-            } else if (requiredPlaybackRate <= 1.15) { // Rushed but possibly acceptable (5% to 15% fast)
-                statusColor = 'bg-yellow-500';
-                statusMessage = 'Slightly Rushed.';
-                pacingNote = `Dialogue is slightly too long. You must speak at ${requiredPlaybackRate.toFixed(2)}x rate (or ${Math.round(130 * requiredPlaybackRate)} WPM) to hit ${targetTime.toFixed(2)}s.`;
-            } else { // Significantly too long (>15% fast)
-                statusColor = 'bg-red-500';
-                statusMessage = 'Significantly Exceeded!';
-                pacingNote = `Dialogue is too long. You must speak at a very fast ${requiredPlaybackRate.toFixed(2)}x rate (or ${Math.round(130 * requiredPlaybackRate)} WPM) to hit ${targetTime.toFixed(2)}s.`;
-            }
-
-            // Update result box
-            statusLight.className = `w-6 h-6 rounded-full shadow-lg transition-colors duration-300 mt-1 ${statusColor}`;
-            resultMessage.textContent = statusMessage;
-            pacingInfo.textContent = pacingNote;
-            finalWordCount.textContent = wordCount;
-            actualDurationDisplay.classList.add('hidden'); // Hide the actual duration until we get TTS response
-            
-            // Show the result box
-            resultsBox.classList.remove('hidden');
-
-            // Set dynamic control defaults for the UI (before TTS audio is ready)
-            dynamicRateInput.value = requiredPlaybackRate.toFixed(2);
-            updateDynamicRateDisplay(requiredPlaybackRate);
-
-            // Since a calculation was done, disable all TTS buttons and prompt for preparation
-            prepareButton.disabled = false;
-            prepareText.textContent = 'Prepare Audio';
-            prepareSpinner.style.display = 'none';
-            playButtonContainer.classList.add('hidden');
-            dynamicSpeedControl.classList.add('hidden');
-        }
-
-        /**
-         * Calls the TTS API to generate the audio, handling retries.
-         * The 403 error fix is primarily handled by ensuring this is complete
-         * and the fetch payload/API call structure is correct.
-         */
-        async function prepareAudio() {
-            const dialogueText = inputElement.value;
-            const selectedVoice = voiceSelect.value;
-            
-            prepareButton.disabled = true;
-            voiceSelect.disabled = true;
-            prepareText.textContent = 'Generating...';
-            prepareSpinner.style.display = 'block';
-            
-            // Check if audio already exists and is for the current text/voice
-            if (audioPlayer.src && dialogueText === audioPlayer.dataset.text && selectedVoice === audioPlayer.dataset.voice) {
-                // Audio is already prepared, just enable play buttons and skip API call
-                handleSuccessfulTTS(timeCP);
-                return;
-            }
-
+        async function makeApiCall(text, voice, retryCount = 0) {
             const payload = {
                 contents: [{
-                    parts: [{ text: dialogueText }]
+                    parts: [{ text: text }]
                 }],
                 generationConfig: {
                     responseModalities: ["AUDIO"],
                     speechConfig: {
                         voiceConfig: {
-                            prebuiltVoiceConfig: { voiceName: selectedVoice }
+                            prebuiltVoiceConfig: { voiceName: voice }
                         }
                     }
                 },
-                model: API_MODEL
             };
 
-            let audioData = null;
-            let sampleRate = null;
-            let lastError = null;
+            try {
+                const response = await fetch(API_FULL_URL, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
 
-            for (let i = 0; i < MAX_RETRIES; i++) {
-                try {
-                    const response = await fetch(API_FULL_URL, {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify(payload)
-                    });
-
-                    if (!response.ok) {
-                        const errorBody = await response.json().catch(() => ({}));
-                        lastError = `API Error ${response.status}: ${errorBody.error?.message || response.statusText}`;
-                        
-                        // Check for 403 specifically - this is where we need to ensure the user sees the error.
-                        if (response.status === 403) {
-                            throw new Error(`403 Forbidden: Check API permissions or environment configuration. Attempt ${i + 1}/${MAX_RETRIES}`);
-                        }
-
-                        // For other transient errors (5xx, etc.), retry
-                        if (i < MAX_RETRIES - 1) {
-                            const delay = Math.pow(2, i) * 1000;
-                            await new Promise(resolve => setTimeout(resolve, delay));
-                            continue;
-                        } else {
-                            throw new Error(lastError);
-                        }
-                    }
-
-                    const result = await response.json();
-                    const part = result?.candidates?.[0]?.content?.parts?.[0];
-                    audioData = part?.inlineData?.data;
-                    const mimeType = part?.inlineData?.mimeType;
-
-                    if (!audioData || !mimeType || !mimeType.startsWith("audio/L16")) {
-                        throw new Error("Invalid TTS response format or missing audio data.");
-                    }
-
-                    // Extract sample rate from the mimeType (e.g., audio/L16;rate=24000)
-                    const rateMatch = mimeType.match(/rate=(\d+)/);
-                    sampleRate = rateMatch ? parseInt(rateMatch[1], 10) : null;
-                    if (!sampleRate) {
-                        throw new Error("Could not determine audio sample rate from API response.");
-                    }
-
-                    // Success: Exit loop
-                    break;
-
-                } catch (error) {
-                    console.error("TTS Fetch attempt failed:", error.message);
-                    lastError = error.message;
-                    if (error.message.includes("403 Forbidden")) {
-                        // Critical error, do not retry a 403
-                        i = MAX_RETRIES; 
-                        break;
-                    }
-                    if (i === MAX_RETRIES - 1) {
-                        showModal(`Failed to generate audio after ${MAX_RETRIES} attempts. Last error: ${error.message}`);
-                    }
+                if (response.status === 429 && retryCount < MAX_RETRIES) {
+                    const delay = Math.pow(2, retryCount) * 1000;
+                    console.warn(`Rate limit exceeded. Retrying in ${delay / 1000}s...`);
+                    await new Promise(resolve => setTimeout(resolve, delay));
+                    return makeApiCall(text, voice, retryCount + 1);
                 }
-            }
 
-            if (!audioData) {
-                // Final cleanup and error display
-                prepareText.textContent = 'Prepare Audio';
-                prepareSpinner.style.display = 'none';
-                prepareButton.disabled = false;
-                voiceSelect.disabled = false;
-                showModal(`Failed to generate audio. The TTS API did not return valid data. Error: ${lastError}`);
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+
+                const result = await response.json();
+                
+                // Validate response structure
+                const part = result?.candidates?.[0]?.content?.parts?.[0];
+                if (!part || !part.inlineData?.data || !part.inlineData?.mimeType) {
+                    throw new Error("Invalid API response structure or missing audio data.");
+                }
+
+                return result;
+
+            } catch (error) {
+                console.error("TTS API Call failed:", error);
+                throw new Error(`Failed to generate audio: ${error.message}. Please check your input.`);
+            }
+        }
+
+        /**
+         * Handles the entire process of calling the TTS API, converting the audio,
+         * and setting up the audio player.
+         */
+        async function prepareAudio() {
+            clearResults(); // Ensure a fresh start
+            const dialogue = inputElement.value;
+            const voice = voiceSelect.value;
+            
+            if (countWords(dialogue) === 0) {
+                showModal("Please enter some dialogue to prepare the audio.");
                 return;
             }
 
-            // --- Convert PCM to WAV and update UI ---
+            // UI feedback for loading
+            prepareButton.disabled = true;
+            submitButton.disabled = true;
+            voiceSelect.disabled = true;
+            prepareText.textContent = 'Generating...';
+            prepareSpinner.style.display = 'inline-block';
+            
+            // Hide play buttons while generating
+            playButtonContainer.classList.add('hidden');
+            dynamicSpeedControl.classList.add('hidden');
+
             try {
+                const result = await makeApiCall(dialogue, voice);
+
+                const part = result.candidates[0].content.parts[0];
+                const audioData = part.inlineData.data;
+                const mimeType = part.inlineData.mimeType; // Should be audio/L16;rate=...
+
+                if (!mimeType.includes('audio/L16')) {
+                    throw new Error("The API returned an unexpected audio format.");
+                }
+                
+                // Extract sample rate from mimeType (e.g., audio/L16;rate=24000)
+                const rateMatch = mimeType.match(/rate=(\d+)/);
+                const sampleRate = rateMatch ? parseInt(rateMatch[1], 10) : 24000;
+                
+                // 1. Convert Base64 (L16 data) to ArrayBuffer
                 const pcmData = base64ToArrayBuffer(audioData);
                 const pcm16 = new Int16Array(pcmData);
+
+                // 2. Convert PCM to WAV Blob
                 const wavBlob = pcmToWav(pcm16, sampleRate);
                 const audioUrl = URL.createObjectURL(wavBlob);
 
-                // Update state and player
+                // 3. Set Audio Player source
                 audioPlayer.src = audioUrl;
-                audioPlayer.load();
-                
-                // Store metadata for re-use check
-                audioPlayer.dataset.text = dialogueText;
-                audioPlayer.dataset.voice = selectedVoice;
+                audioPlayer.classList.remove('hidden');
 
-                // Set timeCP (actual 1.0x duration) based on player metadata
-                // We use setTimeout to wait for the metadata to load after setting src
-                audioPlayer.onloadedmetadata = () => {
-                    timeCP = audioPlayer.duration;
-                    handleSuccessfulTTS(timeCP);
-                };
+                // Wait for audio metadata to load to get the actual duration
+                await new Promise(resolve => {
+                    audioPlayer.onloadedmetadata = () => {
+                        timeCP = audioPlayer.duration; // This is the actual 1.0x duration
+                        resolve();
+                    };
+                });
                 
-            } catch (e) {
-                console.error("Audio processing failed:", e);
-                prepareText.textContent = 'Prepare Audio';
+                // 4. Re-calculate the actual required rate and update results
+                const targetDuration = parseFloat(targetTimeInput.value);
+                requiredPlaybackRate = timeCP / targetDuration;
+                
+                // Update results display with actual duration
+                actualDurationSpan.textContent = timeCP.toFixed(2) + 's';
+                actualDurationDisplay.classList.remove('hidden');
+
+                // Update the status message to use the measured duration
+                resultMessage.textContent = resultMessage.textContent.replace('Estimated time:', 'Measured time:');
+                pacingInfo.textContent = `To meet the ${targetDuration.toFixed(2)}s target, the dialogue must be spoken at ${(requiredPlaybackRate * 100).toFixed(0)}% speed.`;
+
+                // 5. Update Playback Controls
+                playNormalButton.textContent = `Play Normal (${timeCP.toFixed(2)}s)`;
+                playConformedButton.textContent = `Play Conformed (${targetDuration.toFixed(2)}s)`;
+
+                playNormalButton.disabled = false;
+                playConformedButton.disabled = false;
+                
+                playButtonContainer.classList.remove('hidden');
+                dynamicSpeedControl.classList.remove('hidden');
+                playCustomButton.disabled = false;
+                
+                // Also update the dynamic speed display with the new timeCP
+                updateDynamicRateDisplay(dynamicRateInput.value);
+
+            } catch (error) {
+                showModal(error.message);
+                console.error(error);
+                clearResults(); // Ensure all buttons are reset
+            } finally {
+                // UI feedback reset
+                prepareText.textContent = 'Audio Ready!';
                 prepareSpinner.style.display = 'none';
-                prepareButton.disabled = false;
-                voiceSelect.disabled = false;
-                showModal('Audio processing failed: Could not convert the raw audio data into a playable format.');
+                submitButton.disabled = false;
+                prepareButton.disabled = true; // Audio is ready, disable prepare button
+                voiceSelect.disabled = true; // Keep voice locked until clearResults()
             }
         }
+
+
+        // --- Playback Functions ---
         
         /**
-         * Handles UI updates after successful TTS generation.
-         * @param {number} actualDuration - The measured duration of the 1.0x audio.
+         * Generic function to start/pause audio playback.
+         * @param {number} rate - The playback rate (1.0 for normal, >1.0 for faster, etc.).
+         * @param {number} duration - The total perceived duration (for the timer).
+         * @param {string} mode - 'normal', 'conformed', or 'custom'.
          */
-        function handleSuccessfulTTS(actualDuration) {
-            prepareText.textContent = 'Audio Ready';
-            prepareSpinner.style.display = 'none';
-            prepareButton.disabled = false;
-            voiceSelect.disabled = true;
+        function playAudio(rate, duration, mode) {
+            // Check if audio is loaded
+            if (timeCP === 0 || audioPlayer.src === "") {
+                showModal("Audio has not been prepared yet. Click 'Calculate' and then 'Prepare Audio'.");
+                return;
+            }
 
-            // Show actual duration (timeCP)
-            actualDurationDisplay.querySelector('span').textContent = actualDuration.toFixed(2) + 's';
-            actualDurationDisplay.classList.remove('hidden');
+            // If we are currently in the same mode and playing, pause it.
+            if (currentPlayingMode === mode && !audioPlayer.paused) {
+                audioPlayer.pause();
+                return;
+            }
+            
+            // If we are in the same mode and paused, resume.
+            if (currentPlayingMode === mode && audioPlayer.paused) {
+                audioPlayer.play();
+                return;
+            }
+            
+            // If we are switching modes, stop and reset the audio
+            if (currentPlayingMode !== null && currentPlayingMode !== mode) {
+                audioPlayer.pause();
+                audioPlayer.currentTime = 0;
+            }
+            
+            // Set up new playback
+            currentPlayingMode = mode;
+            audioPlayer.playbackRate = rate;
+            currentTimerDuration = duration;
+            ttsPacingNote.textContent = `Pacing: ${mode} (${rate.toFixed(2)}x)`;
 
-            // Enable play buttons
-            playNormalButton.disabled = false;
-            playConformedButton.disabled = false;
-            audioPlayer.classList.remove('hidden');
-            playButtonContainer.classList.remove('hidden');
-            dynamicSpeedControl.classList.remove('hidden');
-            playCustomButton.disabled = false;
-            
-            // Set dynamic control to current required rate
-            dynamicRateInput.value = requiredPlaybackRate.toFixed(2);
-            updateDynamicRateDisplay(requiredPlaybackRate);
-            
-            // Update button labels with final durations
-            updateButtonLabels(null);
+            // Start playing and trigger onplay listener for timer/button updates
+            audioPlayer.play();
+            updateButtonLabels(mode + '-playing');
         }
 
-        /**
-         * Updates the display text for the fixed rate play buttons.
-         * @param {string | null} state - Current playing/paused state or null to reset.
-         */
-        function updateButtonLabels(state) {
-            const normalBaseText = `Play @ 1.0x (${timeCP.toFixed(2)}s)`;
-            const conformedBaseText = `Play @ ${requiredPlaybackRate.toFixed(2)}x (${currentPlaybackDuration.toFixed(2)}s)`;
-            const customBaseText = `Play at Custom Rate`;
-
-            if (state === 'normal-playing') {
-                playNormalButton.textContent = 'Pause ⏸️';
-            } else if (state === 'normal-paused') {
-                 playNormalButton.textContent = 'Resume ▶️';
-            } else {
-                 playNormalButton.textContent = normalBaseText;
-            }
-
-            if (state === 'conformed-playing') {
-                playConformedButton.textContent = 'Pause ⏸️';
-            } else if (state === 'conformed-paused') {
-                 playConformedButton.textContent = 'Resume ▶️';
-            } else {
-                 playConformedButton.textContent = conformedBaseText;
-            }
-
-            // Only update custom button text if it is paused or stopped
-             if (state === 'custom-playing') {
-                playCustomButton.textContent = 'Pause ⏸️';
-            } else if (state === 'custom-paused') {
-                 playCustomButton.textContent = 'Resume ▶️';
-            } else {
-                 playCustomButton.textContent = customBaseText;
-            }
-
-             // Disable the other button if one is playing
-             playNormalButton.disabled = (state !== null && state.startsWith('conformed')) || (state !== null && state.startsWith('custom'));
-             playConformedButton.disabled = (state !== null && state.startsWith('normal')) || (state !== null && state.startsWith('custom'));
-             playCustomButton.disabled = (state !== null && state.startsWith('normal')) || (state !== null && state.startsWith('conformed'));
-
-             // Re-enable if the audio is paused (only the paused button remains active)
-             if (state && state.endsWith('-paused')) {
-                 playNormalButton.disabled = false;
-                 playConformedButton.disabled = false;
-                 playCustomButton.disabled = false;
-             }
-        }
-        
-        /**
-         * Plays audio at the recorded 1.0x rate (timeCP).
-         */
         function playNormalAudio() {
-            if (currentPlayingMode === 'normal' && !audioPlayer.paused) {
-                audioPlayer.pause();
-                currentPlayingMode = 'normal'; // Remains normal, but paused
-            } else if (currentPlayingMode === 'normal' && audioPlayer.paused) {
-                 audioPlayer.play();
-            } else {
-                // New play mode or switching mode
-                audioPlayer.pause();
-                stopCountdown();
-                
-                audioPlayer.playbackRate = 1.0;
-                audioPlayer.currentTime = 0;
-                currentTimerDuration = timeCP; // Set timer to actual duration
-                currentPlayingMode = 'normal';
-                
-                ttsPacingNote.textContent = 'Pacing: Normal (1.00x)';
-                audioPlayer.play();
+            playAudio(1.0, timeCP, 'normal');
+        }
+
+        function playConformedAudio() {
+            // Ensure rate is not zero or negative
+            const rate = requiredPlaybackRate > 0 ? requiredPlaybackRate : 1.0;
+            playAudio(rate, targetTime, 'conformed');
+        }
+
+        function playCustomRateAudio() {
+            const rate = parseFloat(dynamicRateInput.value);
+            const duration = timeCP / rate;
+            // Ensure rate is within safe bounds (0.5 to 2.0 per slider, but check just in case)
+            if (rate < 0.5 || rate > 2.0) {
+                 showModal("Custom rate is outside the safe range (0.5x to 2.0x). Please adjust the slider.");
+                 return;
             }
+            playAudio(rate, duration, 'custom');
         }
 
         /**
-         * Plays audio at the calculated requiredPlaybackRate to hit the target time.
+         * Updates the dynamic rate display and calculates the resulting duration.
+         * This also automatically updates the playCustomButton label.
+         * @param {string} rateValue - The current value of the dynamic rate slider.
          */
-        function playConformedAudio() {
-             if (currentPlayingMode === 'conformed' && !audioPlayer.paused) {
-                audioPlayer.pause();
-                currentPlayingMode = 'conformed'; // Remains conformed, but paused
-            } else if (currentPlayingMode === 'conformed' && audioPlayer.paused) {
-                 audioPlayer.play();
+        function updateDynamicRateDisplay(rateValue) {
+            const rate = parseFloat(rateValue);
+            currentDynamicRate.textContent = rate.toFixed(2);
+            
+            // Only calculate duration if timeCP (actual audio duration) is known
+            let duration;
+            if (timeCP > 0) {
+                duration = timeCP / rate;
+                currentDynamicDuration.textContent = duration.toFixed(2);
+                playCustomButton.textContent = `Play at Custom Rate (${duration.toFixed(2)}s)`;
             } else {
-                // New play mode or switching mode
-                audioPlayer.pause();
-                stopCountdown();
-
-                audioPlayer.playbackRate = requiredPlaybackRate;
-                audioPlayer.currentTime = 0;
-                currentTimerDuration = parseFloat(targetTimeInput.value); // Set timer to target time
-                currentPlayingMode = 'conformed';
-
-                ttsPacingNote.textContent = `Pacing: Conformed (${requiredPlaybackRate.toFixed(2)}x)`;
-                audioPlayer.play();
+                // Fallback using WPM estimation if prepareAudio hasn't run
+                const dialogue = inputElement.value;
+                const wordCount = countWords(dialogue);
+                const spokenDurationEstimate = (wordCount / CP_WPM) * 60;
+                duration = spokenDurationEstimate / rate;
+                currentDynamicDuration.textContent = duration.toFixed(2);
+                playCustomButton.textContent = `Play at Custom Rate (${duration.toFixed(2)}s)`;
             }
         }
         
-        /**
-         * Updates the dynamic rate display and recalculated duration based on the slider input.
-         * @param {number} rate - The new playback rate from the slider.
-         */
-        function updateDynamicRateDisplay(rate) {
-            const floatRate = parseFloat(rate);
-            const calculatedDuration = timeCP / floatRate;
-            
-            // Store the dynamic timer duration separately
-            currentDynamicDuration.dataset.duration = calculatedDuration.toFixed(2); 
-
-            // Update UI elements
-            currentDynamicRate.textContent = floatRate.toFixed(2);
-            currentDynamicDuration.textContent = calculatedDuration.toFixed(2);
-            
-            // If the audio is currently playing in custom mode, update rate and timer immediately
-            if (currentPlayingMode === 'custom' && !audioPlayer.paused) {
-                audioPlayer.playbackRate = floatRate;
-                // Restart timer with new duration and current elapsed time factored by new rate
-                const newElapsedTime = audioPlayer.currentTime * (floatRate / audioPlayer.playbackRate);
-                audioPlayer.currentTime = newElapsedTime; // Adjust player time based on the new rate
-                currentTimerDuration = calculatedDuration; 
-                startCountdown(calculatedDuration, audioPlayer.currentTime / floatRate);
-                ttsPacingNote.textContent = `Pacing: Custom (${floatRate.toFixed(2)}x)`;
-            }
-        }
-
-        /**
-         * Plays audio at the dynamically set rate from the slider.
-         */
-        function playCustomRateAudio() {
-            const customRate = parseFloat(dynamicRateInput.value);
-            const customDuration = parseFloat(currentDynamicDuration.dataset.duration);
-            
-            if (currentPlayingMode === 'custom' && !audioPlayer.paused) {
-                audioPlayer.pause();
-                currentPlayingMode = 'custom'; // Remains custom, but paused
-            } else if (currentPlayingMode === 'custom' && audioPlayer.paused) {
-                 audioPlayer.play();
-            } else {
-                // New play mode or switching mode
-                audioPlayer.pause();
-                stopCountdown();
-
-                audioPlayer.playbackRate = customRate;
-                audioPlayer.currentTime = 0;
-                currentTimerDuration = customDuration; // Set timer to custom duration
-                currentPlayingMode = 'custom';
-
-                ttsPacingNote.textContent = `Pacing: Custom (${customRate.toFixed(2)}x)`;
-                audioPlayer.play();
-            }
-        }
-
-
         // --- Initialization ---
 
-        window.onload = () => {
-            // Set initial dynamic rate display
-            updateDynamicRateDisplay(dynamicRateInput.value);
-            // Run initial word count check to set button state
+        window.onload = function() {
+            // Initial check to disable/enable submit button
             updateWordCount(inputElement);
-            // Ensure the initial snap radio button is selected and calls snapToTime
-            const initialSnap = document.querySelector('input[name="snapTime"]:checked');
-            if (initialSnap) {
-                 snapToTime(initialSnap.value);
+            // Initial setting of target time display
+            updateTargetTimeDisplay(targetTimeInput.value);
+            // Initial setup for the dynamic rate display
+            updateDynamicRateDisplay(dynamicRateInput.value);
+            
+            // Ensure the submit button is disabled initially if no text is present
+            if (countWords(inputElement.value) === 0) {
+                 submitButton.disabled = true;
             }
         };
 
