@@ -1,85 +1,105 @@
-/**
- * Vercel Serverless Function to securely proxy requests to the Gemini API.
- * This file MUST be saved as 'api/generate.js' in your repository root.
- * It accesses the GEMINI_API_KEY environment variable securely on the server.
- */
-const API_KEY = process.env.GEMINI_API_KEY;
-const MODEL_NAME = 'gemini-2.5-flash-preview-05-20';
-const API_URL = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL_NAME}:generateContent`;
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Secure AI Text Generator</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Inter', sans-serif; background-color: #f3f4f6; }
+        /* Simple loading spinner */
+        .spinner {
+            border: 4px solid rgba(0, 0, 0, 0.1);
+            border-left-color: #4f46e5;
+            border-radius: 50%;
+            width: 24px;
+            height: 24px;
+            animation: spin 1s linear infinite;
+            display: none;
+        }
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body class="p-4 md:p-8 min-h-screen flex justify-center items-start">
 
-// Helper to implement exponential backoff for retries
-const fetchWithRetry = async (url, options, retries = 3) => {
-    for (let i = 0; i < retries; i++) {
-        try {
-            const response = await fetch(url, options);
-            if (response.status !== 429) { // Not a rate limit error, proceed
-                return response;
+    <div class="w-full max-w-2xl bg-white p-6 md:p-8 rounded-xl shadow-2xl space-y-6">
+        <h1 class="text-3xl font-bold text-gray-800 border-b pb-4">Secure Gemini Proxy</h1>
+        <p class="text-sm text-gray-500">
+            This application uses a Vercel Serverless Function (`/api/generate`) to safely call the Gemini API, protecting your `GEMINI_API_KEY` from public exposure.
+        </p>
+
+        <textarea id="promptInput" rows="4" 
+            class="w-full p-3 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500 transition duration-150"
+            placeholder="Enter your prompt here (e.g., Write a short poem about coding a perfect function)..."></textarea>
+
+        <button id="generateBtn" 
+            class="w-full flex justify-center items-center px-4 py-3 bg-indigo-600 text-white font-semibold rounded-lg shadow-md hover:bg-indigo-700 transition duration-300 focus:outline-none focus:ring-4 focus:ring-indigo-500 focus:ring-opacity-50">
+            Generate Content
+            <div id="loadingSpinner" class="spinner ml-3"></div>
+        </button>
+
+        <div id="responseContainer" class="mt-6 p-4 bg-indigo-50 border border-indigo-200 rounded-lg shadow-inner">
+            <h2 class="text-xl font-semibold text-indigo-800 mb-2">AI Response</h2>
+            <p id="responseText" class="whitespace-pre-wrap text-gray-700">The generated text will appear here.</p>
+        </div>
+    </div>
+
+    <script>
+        const promptInput = document.getElementById('promptInput');
+        const generateBtn = document.getElementById('generateBtn');
+        const responseText = document.getElementById('responseText');
+        const loadingSpinner = document.getElementById('loadingSpinner');
+
+        generateBtn.addEventListener('click', async () => {
+            const userPrompt = promptInput.value.trim();
+            if (!userPrompt) {
+                responseText.textContent = "Please enter a prompt.";
+                return;
             }
-            // Rate limit hit (429), wait before retrying
-            await new Promise(resolve => setTimeout(resolve, Math.pow(2, i) * 1000));
-        } catch (error) {
-            // Non-429 error, wait before trying again
-            await new Promise(resolve => setTimeout(resolve, Math.pow(2, i) * 1000));
-        }
-    }
-    throw new Error('API request failed after multiple retries.');
-};
 
-module.exports = async (req, res) => {
-    // 1. Check for API Key
-    if (!API_KEY) {
-        // This error will confirm if the key is missing in Vercel's env variables
-        res.status(500).json({ error: 'GEMINI_API_KEY environment variable is not set on the Vercel server.' });
-        return;
-    }
+            // UI updates for loading state
+            generateBtn.disabled = true;
+            generateBtn.textContent = 'Generating...';
+            loadingSpinner.style.display = 'block';
+            responseText.textContent = 'Awaiting response from serverless function...';
 
-    // 2. Parse Request Body (from the frontend)
-    if (req.method !== 'POST') {
-        res.status(405).json({ error: 'Method Not Allowed. Use POST.' });
-        return;
-    }
+            try {
+                // Post request to the Vercel Serverless Function proxy
+                const response = await fetch('/api/generate', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    // Send the user's prompt as JSON data
+                    body: JSON.stringify({ prompt: userPrompt }),
+                });
 
-    const { prompt } = req.body;
+                if (!response.ok) {
+                    throw new Error(`Serverless Function Error: ${response.status} ${response.statusText}`);
+                }
 
-    if (!prompt) {
-        res.status(400).json({ error: 'Missing "prompt" in request body.' });
-        return;
-    }
+                const data = await response.json();
+                
+                if (data.error) {
+                    responseText.textContent = `API Error: ${data.error}`;
+                } else {
+                    // Display the content received from the proxy
+                    responseText.textContent = data.text || "No text generated.";
+                }
 
-    // 3. Construct Gemini API Payload
-    const payload = {
-        contents: [{ parts: [{ text: prompt }] }],
-    };
-
-    // 4. Call the Google API securely
-    try {
-        const fetchOptions = {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify(payload),
-        };
-        
-        // Use the API Key in the query string
-        const response = await fetchWithRetry(`${API_URL}?key=${API_KEY}`, fetchOptions);
-
-        const result = await response.json();
-
-        // Check for common API errors in the response body
-        if (result.error) {
-            // Forward the API error back to the client
-            res.status(result.error.code || 500).json({ error: result.error.message });
-            return;
-        }
-
-        const text = result.candidates?.[0]?.content?.parts?.[0]?.text || "Generation failed to return text.";
-
-        // 5. Send successful response back to the client
-        res.status(200).json({ text: text });
-
-    } catch (error) {
-        console.error('Error during Gemini API call:', error.message);
-        res.status(500).json({ error: `Internal Server Error: ${error.message}` });
-    }
-};
+            } catch (error) {
+                console.error("Fetch failed:", error);
+                responseText.textContent = `Failed to connect to the generator. Check the console for errors. Details: ${error.message}`;
+            } finally {
+                // UI updates for ending state
+                generateBtn.disabled = false;
+                generateBtn.textContent = 'Generate Content';
+                loadingSpinner.style.display = 'none';
+            }
+        });
+    </script>
+</body>
+</html>
